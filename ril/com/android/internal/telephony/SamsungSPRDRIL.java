@@ -295,6 +295,10 @@ public class SamsungSPRDRIL extends RIL implements CommandsInterface {
                     mIccStatusChangedRegistrants.notifyRegistrants();
                 }
                 break;
+            case RIL_REQUEST_GET_RADIO_CAPABILITY: {
+                ret = makeStaticRadioCapability();
+                break;
+            }
         }
 
         if (error != 0) {
@@ -311,6 +315,34 @@ public class SamsungSPRDRIL extends RIL implements CommandsInterface {
         }
 
         return rr;
+    }
+
+    @Override
+    public void getRadioCapability(Message response) {
+        String rafString = mContext.getResources().getString(
+            com.android.internal.R.string.config_radio_access_family);
+        if (RILJ_LOGD) riljLog("getRadioCapability: returning static radio capability [" + rafString + "]");
+        if (response != null) {
+            Object ret = makeStaticRadioCapability();
+            AsyncResult.forMessage(response, ret, null);
+            response.sendToTarget();
+        }
+    }
+
+    public void setDataSubscription(Message result) {
+          int simId = mInstanceId == null ? 0 : mInstanceId;
+          if (RILJ_LOGD) riljLog("Setting data subscription to " + simId);
+          invokeOemRilRequestRaw(new byte[] {(byte) 9, (byte) 4}, result);
+    }
+
+    public void setDefaultVoiceSub(int subIndex, Message response) {
+        // Fake the message
+        AsyncResult.forMessage(response, 0, null);
+        response.sendToTarget();
+    }
+
+    private void invokeOemRilRequestSprd(byte key, byte value, Message response) {
+        invokeOemRilRequestRaw(new byte[] { 'S', 'P', 'R', 'D', key, value }, response);
     }
 
     @Override

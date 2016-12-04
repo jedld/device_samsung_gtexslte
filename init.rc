@@ -620,11 +620,6 @@ service adbd /sbin/adbd
 on property:ro.kernel.qemu=1
     start adbd
 
-service lmkd /system/bin/lmkd
-    class core
-    critical
-    socket lmkd seqpacket 0660 system system
-    writepid /dev/cpuset/system-background/tasks
 
 service servicemanager /system/bin/servicemanager
     class core
@@ -718,6 +713,7 @@ service gatekeeperd /system/bin/gatekeeperd /data/misc/gatekeeper
 
 service installd /system/bin/installd
     class main
+    group sdcard_rw system
     socket installd stream 600 system system
 
 service racoon /system/bin/racoon

@@ -91,6 +91,9 @@ public class SamsungGtexslteRIL extends SamsungSPRDRIL implements CommandsInterf
             case 11021: // RIL_UNSOL_RESPONSE_HANDOVER:
                 ret = responseVoid(p);
                 break;
+            case 11003:
+                ret = responseVoid(p);
+                break;
             case 1036:
                 ret = responseVoid(p);
                 break;

@@ -106,7 +106,7 @@ PRODUCT_DEFAULT_PROPERTY_OVERRIDES += \
 PRODUCT_PACKAGES += \
 		hwcomposer.sc8830 \
 		sprd_gsp.sc8830 \
-		libion \
+		libmemtrack.sc8830 \
 		libion_sprd
 
 # Usb accessory
@@ -163,8 +163,6 @@ PRODUCT_PACKAGES += \
 
 # Permissions
 PERMISSION_XML_FILES := \
-	$(LOCAL_PATH)/permissions/platform.xml \
-	$(LOCAL_PATH)/permissions/tablet_core_hardware.xml \
 	frameworks/native/data/etc/android.hardware.camera.front.xml \
 	frameworks/native/data/etc/android.hardware.camera.xml \
 	frameworks/native/data/etc/android.hardware.bluetooth.xml \
