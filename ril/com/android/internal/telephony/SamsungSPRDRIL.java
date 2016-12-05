@@ -95,20 +95,10 @@ public class SamsungSPRDRIL extends RIL implements CommandsInterface {
         }
     }
 
-    public void setDataSubscription(Message result) {
-          int simId = mInstanceId == null ? 0 : mInstanceId;
-          if (RILJ_LOGD) riljLog("Setting data subscription to " + simId);
-          invokeOemRilRequestRaw(new byte[] {(byte) 9, (byte) 4}, result);
-    }
-
     public void setDefaultVoiceSub(int subIndex, Message response) {
         // Fake the message
         AsyncResult.forMessage(response, 0, null);
         response.sendToTarget();
-    }
-
-    private void invokeOemRilRequestSprd(byte key, byte value, Message response) {
-        invokeOemRilRequestRaw(new byte[] { 'S', 'P', 'R', 'D', key, value }, response);
     }
 
     protected RILRequest
@@ -333,12 +323,6 @@ public class SamsungSPRDRIL extends RIL implements CommandsInterface {
           int simId = mInstanceId == null ? 0 : mInstanceId;
           if (RILJ_LOGD) riljLog("Setting data subscription to " + simId);
           invokeOemRilRequestRaw(new byte[] {(byte) 9, (byte) 4}, result);
-    }
-
-    public void setDefaultVoiceSub(int subIndex, Message response) {
-        // Fake the message
-        AsyncResult.forMessage(response, 0, null);
-        response.sendToTarget();
     }
 
     private void invokeOemRilRequestSprd(byte key, byte value, Message response) {
