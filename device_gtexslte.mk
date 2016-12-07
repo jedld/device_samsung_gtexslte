@@ -106,7 +106,7 @@ PRODUCT_DEFAULT_PROPERTY_OVERRIDES += \
 PRODUCT_PACKAGES += \
 		hwcomposer.sc8830 \
 		sprd_gsp.sc8830 \
-		libmemtrack.sc8830 \
+		memtrack.sc8830 \
 		libion_sprd
 
 # Usb accessory

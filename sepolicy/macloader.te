@@ -9,3 +9,5 @@ allow macloader self:capability dac_override;
 allow macloader wifi_efs_file:dir { read write search };
 allow macloader wifi_efs_file:file { read write open };
 allow macloader kernel:system module_request;
+allow macloader self:capability net_raw;
+allow macloader self:udp_socket create;
