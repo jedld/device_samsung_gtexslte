@@ -14,3 +14,6 @@ allow rild at_distributor:dir search;
 allow rild at_distributor:file { open read getattr };
 allow rild at_distributor:file getattr;
 allow rild rild_prop:property_service set;
+
+allow rild system_server:dir search;
+allow rild system_server:file { read getattr open };

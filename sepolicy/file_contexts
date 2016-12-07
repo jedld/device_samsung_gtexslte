@@ -47,6 +47,7 @@
 /dev/block/mmcblk[0-9].* u:object_r:emmcblk_device:s0
 /dev/block/zram[0-9]		 u:object_r:ram_device:s0
 
+/dev/block/mmcblk0p22    u:object_r:frp_block_device:s0
 /dev/block/mmcblk0p17    u:object_r:efsblk_device:s0
 /dev/block/mmcblk0       u:object_r:mmc_block_device:s0
 /dev/block/mmcblk0p25    u:object_r:systemblk_device:s0
@@ -103,7 +104,13 @@
 /system/bin/charon  u:object_r:charon_exec:s0
 /system/bin/scs     u:object_r:scs_exec:s0
 
+
 #data
-/data/data_usage_rx   u:object_r:mediaserver:s0
+/data/log(/.*)?	u:object_r:dumplog_data_file:s0
+/data/local/media(/.*)?     u:object_r:media_data_file:s0
+
+#rild related files
+/data/.wifiver.info           u:object_r:radio_data_file:s0
+/data/data/data_usage_(.*)?      u:object_r:radio_data_file:s0
 
 /mnt/shell/emulated/([1-9])?[0-9](/.*)?  u:object_r:media_rw_data_file:s0
