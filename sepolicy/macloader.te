@@ -11,3 +11,4 @@ allow macloader wifi_efs_file:file { read write open };
 allow macloader kernel:system module_request;
 allow macloader self:capability net_raw;
 allow macloader self:udp_socket create;
+allow macloader radio_data_file:file { read getattr open };
