@@ -11,3 +11,4 @@ allow batterysrv prod_file:dir { read write search };
 allow batterysrv prod_file:file { open read write };
 allow batterysrv log_device:dir { write search };
 allow batterysrv log_device:chr_file { write open };
+allow batterysrv batterysrv_data_file:file { read open };

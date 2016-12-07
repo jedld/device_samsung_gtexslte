@@ -3,3 +3,4 @@ type rild_prop, property_type;
 type media_prop, property_type;
 type monitor_prop, property_type;
 type slog_prop, property_type;
+type sswap_prop, property_type;

@@ -110,6 +110,7 @@
 /data/local/media(/.*)?     u:object_r:media_data_file:s0
 
 #rild related files
+/data/.battery_nv            u:object_r:batterysrv_data_file:s0
 /data/.wifiver.info           u:object_r:radio_data_file:s0
 /data/data/data_usage_(.*)?      u:object_r:radio_data_file:s0
 
