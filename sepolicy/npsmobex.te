@@ -1,0 +1,5 @@
+# cp_diskserver
+type npsmobex, domain;
+type npsmobex_exec, exec_type, file_type;
+
+init_daemon_domain(npsmobex)
