@@ -17,3 +17,5 @@ allow init sdcardd_exec:file { read getattr open };
 allow init asec_apk_file:dir mounton;
 allow init socket_device:sock_file { create setattr };
 allow init self:system module_load;
+allow init property_socket:sock_file write;
+allow init swap_device:blk_file write;
