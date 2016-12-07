@@ -9,3 +9,4 @@ allow mediaserver audio_device:fifo_file { open read write };
 allow mediaserver sysfs_wake_lock:file { open read write };
 allow mediaserver system_file:file execmod;
 allow mediaserver media_prop:property_service set;
+allow mediaserver media_data_file:fifo_file { read open setattr };

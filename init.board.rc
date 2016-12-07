@@ -142,5 +142,6 @@ service engpcclientwcn /system/bin/engpc -p wcn -a /dev/ttyGS2 -d /dev/ttyGS3
 service swapon /sbin/sswap -s
     class core
     user root
+    seclabel u:r:sswap:s0
     group root
     oneshot
