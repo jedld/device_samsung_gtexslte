@@ -76,6 +76,7 @@
 /dev/usb-ffs              u:object_r:usb_device:s0
 
 /data/misc/radio(/.*)?	u:object_r:radio_data_file:s0
+/sys/class/android_usb/android0(/.*)?  u:object_r:sysfs_ss_writable:s0
 
 /sbin/sswap           u:object_r:sswap_exec:s0
 
