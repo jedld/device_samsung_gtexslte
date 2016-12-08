@@ -11,7 +11,6 @@ allow bootchecker kernel:system syslog_read;
 allow bootchecker system_file:file execute_no_trans;
 allow bootchecker logdr_socket:sock_file write;
 allow bootchecker logd:unix_stream_socket connectto;
-allow bootchecker kernel:system module_request;
 allow bootchecker logcat_exec:file { read getattr open execute execute_no_trans };
 allow bootchecker dumplog_data_file:file { create getattr open write append setattr };
 allow bootchecker dumplog_data_file:dir { write add_name };
