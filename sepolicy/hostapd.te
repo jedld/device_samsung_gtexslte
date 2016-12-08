@@ -1,0 +1,3 @@
+allow hostapd kernel:system module_request;
+allow hostapd wpa_device:chr_file { read open };
+allow dnsmasq kernel:system module_request;

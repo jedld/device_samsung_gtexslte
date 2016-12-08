@@ -34,6 +34,7 @@ on post-fs-data
     chown system wifi /data/.wifiver.info
     chmod 0664 /data/.wifiver.info
 
+    restorecon /data/.wifiver.info
 # permissions for wifi
     chmod 644 /system/etc/firmware/sc2331_fdl.bin
     chmod 644 /system/etc/firmware/sc2331_fw.bin
