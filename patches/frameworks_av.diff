@@ -1,34 +1,3976 @@
+From 4f236c532039a61f0cf681d2e3c6e022911bbb5c Mon Sep 17 00:00:00 2001
+From: Marco Nelissen <marcone@google.com>
+Date: Thu, 28 Apr 2016 13:32:41 -0700
+Subject: [PATCH 01/60] Check section size when verifying CRC
+
+Bug: 28333006
+Change-Id: Ief7a2da848face78f0edde21e2f2009316076679
+---
+ media/libstagefright/mpeg2ts/ATSParser.cpp | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/media/libstagefright/mpeg2ts/ATSParser.cpp b/media/libstagefright/mpeg2ts/ATSParser.cpp
+index e3c3e80..2f2b115 100644
+--- a/media/libstagefright/mpeg2ts/ATSParser.cpp
++++ b/media/libstagefright/mpeg2ts/ATSParser.cpp
+@@ -1713,6 +1713,13 @@ bool ATSParser::PSISection::isCRCOkay() const {
+     unsigned sectionLength = U16_AT(data + 1) & 0xfff;
+     ALOGV("sectionLength %u, skip %u", sectionLength, mSkipBytes);
+
++
++    if(sectionLength < mSkipBytes) {
++        ALOGE("b/28333006");
++        android_errorWriteLog(0x534e4554, "28333006");
++        return false;
++    }
++
+     // Skip the preceding field present when payload start indicator is on.
+     sectionLength -= mSkipBytes;
+
+
+From daef4327fe0c75b0a90bb8627458feec7a301e1f Mon Sep 17 00:00:00 2001
+From: Marco Nelissen <marcone@google.com>
+Date: Mon, 2 May 2016 14:12:34 -0700
+Subject: [PATCH 02/60] Clear unused pointer field when sending across binder
+
+Bug: 28377502
+Change-Id: Iad5ebfb0a9ef89f09755bb332579dbd3534f9c98
+---
+ media/libmediaplayerservice/MetadataRetrieverClient.cpp | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/media/libmediaplayerservice/MetadataRetrieverClient.cpp b/media/libmediaplayerservice/MetadataRetrieverClient.cpp
+index a5a1fa5..f6acdf6 100644
+--- a/media/libmediaplayerservice/MetadataRetrieverClient.cpp
++++ b/media/libmediaplayerservice/MetadataRetrieverClient.cpp
+@@ -231,6 +231,7 @@ sp<IMemory> MetadataRetrieverClient::getFrameAtTime(int64_t timeUs, int option)
+     ALOGV("rotation: %d", frameCopy->mRotationAngle);
+     frameCopy->mData = (uint8_t *)frameCopy + sizeof(VideoFrame);
+     memcpy(frameCopy->mData, frame->mData, frame->mSize);
++    frameCopy->mData = 0;
+     delete frame;  // Fix memory leakage
+     return mThumbnail;
+ }
+
+From 60547808ca4e9cfac50028c00c58a6ceb2319301 Mon Sep 17 00:00:00 2001
+From: Pawin Vongmasa <pawin@google.com>
+Date: Wed, 11 May 2016 16:08:21 -0700
+Subject: [PATCH 03/60] h264bsdActivateParamSets: Prevent multiplication
+ overflow.
+
+Report MEMORY_ALLOCATION_ERROR if pStorage->picSizeInMbs would
+exceed UINT32_MAX bytes.
+
+Bug: 28532266
+Change-Id: Ia6f11efb18818afcdb5fa2a38a14f2a2d8c8447a
+---
+ .../codecs/on2/h264dec/source/h264bsd_storage.c    | 24 +++++++++++++++++++---
+ 1 file changed, 21 insertions(+), 3 deletions(-)
+
+diff --git a/media/libstagefright/codecs/on2/h264dec/source/h264bsd_storage.c b/media/libstagefright/codecs/on2/h264dec/source/h264bsd_storage.c
+index 3234754..ff7a42a 100644
+--- a/media/libstagefright/codecs/on2/h264dec/source/h264bsd_storage.c
++++ b/media/libstagefright/codecs/on2/h264dec/source/h264bsd_storage.c
+@@ -58,6 +58,10 @@
+     3. Module defines
+ ------------------------------------------------------------------------------*/
+
++#ifndef UINT32_MAX
++#define UINT32_MAX       (4294967295U)
++#endif
++
+ /*------------------------------------------------------------------------------
+     4. Local function prototypes
+ ------------------------------------------------------------------------------*/
+@@ -326,9 +330,23 @@ u32 h264bsdActivateParamSets(storage_t *pStorage, u32 ppsId, u32 isIdr)
+         pStorage->activePps = pStorage->pps[ppsId];
+         pStorage->activeSpsId = pStorage->activePps->seqParameterSetId;
+         pStorage->activeSps = pStorage->sps[pStorage->activeSpsId];
+-        pStorage->picSizeInMbs =
+-            pStorage->activeSps->picWidthInMbs *
+-            pStorage->activeSps->picHeightInMbs;
++
++        /* report error before multiplication to prevent integer overflow */
++        if (pStorage->activeSps->picWidthInMbs == 0)
++        {
++            pStorage->picSizeInMbs = 0;
++        }
++        else if (pStorage->activeSps->picHeightInMbs >
++                 UINT32_MAX / pStorage->activeSps->picWidthInMbs)
++        {
++            return(MEMORY_ALLOCATION_ERROR);
++        }
++        else
++        {
++            pStorage->picSizeInMbs =
++                pStorage->activeSps->picWidthInMbs *
++                pStorage->activeSps->picHeightInMbs;
++        }
+
+         pStorage->currImage->width = pStorage->activeSps->picWidthInMbs;
+         pStorage->currImage->height = pStorage->activeSps->picHeightInMbs;
+
+From e248db02fbab2ee9162940bc19f087fd7d96cb9d Mon Sep 17 00:00:00 2001
+From: Jeff Tinker <jtinker@google.com>
+Date: Fri, 13 May 2016 11:48:11 -0700
+Subject: [PATCH 04/60] Fix security vulnerability in libstagefright
+
+bug: 28175045
+Change-Id: Icee6c7eb5b761da4aa3e412fb71825508d74d38f
+---
+ media/libstagefright/DRMExtractor.cpp | 12 +++++++++++-
+ 1 file changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/media/libstagefright/DRMExtractor.cpp b/media/libstagefright/DRMExtractor.cpp
+index 9cb6e86..e2bc89c 100644
+--- a/media/libstagefright/DRMExtractor.cpp
++++ b/media/libstagefright/DRMExtractor.cpp
+@@ -200,7 +200,17 @@ status_t DRMSource::read(MediaBuffer **buffer, const ReadOptions *options) {
+                 continue;
+             }
+
+-            CHECK(dstOffset + 4 <= (*buffer)->size());
++            if (dstOffset > SIZE_MAX - 4 ||
++                dstOffset + 4 > SIZE_MAX - nalLength ||
++                dstOffset + 4 + nalLength > (*buffer)->size()) {
++                (*buffer)->release();
++                (*buffer) = NULL;
++                if (decryptedDrmBuffer.data) {
++                    delete [] decryptedDrmBuffer.data;
++                    decryptedDrmBuffer.data = NULL;
++                }
++                return ERROR_MALFORMED;
++            }
+
+             dstData[dstOffset++] = 0;
+             dstData[dstOffset++] = 0;
+
+From e7142a0703bc93f75e213e96ebc19000022afed9 Mon Sep 17 00:00:00 2001
+From: Marco Nelissen <marcone@google.com>
+Date: Wed, 11 May 2016 11:11:20 -0700
+Subject: [PATCH 05/60] Check malloc result to avoid NPD
+
+Bug: 28471206
+Change-Id: Id5d055d76893d6f53a2e524ff5f282d1ddca3345
+---
+ media/libstagefright/MPEG4Extractor.cpp | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/media/libstagefright/MPEG4Extractor.cpp b/media/libstagefright/MPEG4Extractor.cpp
+index f8789da..f6206d2 100755
+--- a/media/libstagefright/MPEG4Extractor.cpp
++++ b/media/libstagefright/MPEG4Extractor.cpp
+@@ -535,6 +535,10 @@ status_t MPEG4Extractor::readMetaData() {
+     }
+     if (psshsize > 0 && psshsize <= UINT32_MAX) {
+         char *buf = (char*)malloc(psshsize);
++        if (!buf) {
++            ALOGE("b/28471206");
++            return NO_MEMORY;
++        }
+         char *ptr = buf;
+         for (size_t i = 0; i < mPssh.size(); i++) {
+             memcpy(ptr, mPssh[i].uuid, 20); // uuid + length
+@@ -1702,6 +1706,11 @@ status_t MPEG4Extractor::parseChunk(off64_t *offset, int depth) {
+
+             sp<ABuffer> buffer = new ABuffer(chunk_data_size);
+
++            if (buffer->data() == NULL) {
++                ALOGE("b/28471206");
++                return NO_MEMORY;
++            }
++
+             if (mDataSource->readAt(
+                         data_offset, buffer->data(), chunk_data_size) < chunk_data_size) {
+                 return ERROR_IO;
+@@ -1719,6 +1728,11 @@ status_t MPEG4Extractor::parseChunk(off64_t *offset, int depth) {
+         {
+             sp<ABuffer> buffer = new ABuffer(chunk_data_size);
+
++            if (buffer->data() == NULL) {
++                ALOGE("b/28471206");
++                return NO_MEMORY;
++            }
++
+             if (mDataSource->readAt(
+                         data_offset, buffer->data(), chunk_data_size) < chunk_data_size) {
+                 return ERROR_IO;
+@@ -2051,6 +2065,10 @@ status_t MPEG4Extractor::parseChunk(off64_t *offset, int depth) {
+                     return ERROR_MALFORMED;
+                 }
+                 sp<ABuffer> buffer = new ABuffer(chunk_data_size + 1);
++                if (buffer->data() == NULL) {
++                    ALOGE("b/28471206");
++                    return NO_MEMORY;
++                }
+                 if (mDataSource->readAt(
+                     data_offset, buffer->data(), chunk_data_size) != (ssize_t)chunk_data_size) {
+                     return ERROR_IO;
+
+From 6fdee2a83432b3b150d6a34f231c4e2f7353c01e Mon Sep 17 00:00:00 2001
+From: Marco Nelissen <marcone@google.com>
+Date: Fri, 13 May 2016 10:39:23 -0700
+Subject: [PATCH 06/60] limit mediaserver memory
+
+Limit mediaserver using rlimit, to prevent it from bringing down the system
+via the low memory killer.
+Default max is 65% of total RAM, but can be customized via system property.
+
+Bug: 28471206
+Bug: 28615448
+Change-Id: Ic84137435d1ef0a6883e9789a4b4f399e4283f05
+---
+ media/libmedia/Android.mk              |  1 +
+ media/libmedia/MediaUtils.cpp          | 74 ++++++++++++++++++++++++++++++++++
+ media/libmedia/MediaUtils.h            | 35 ++++++++++++++++
+ media/mediaserver/Android.mk           |  1 +
+ media/mediaserver/main_mediaserver.cpp |  6 +++
+ 5 files changed, 117 insertions(+)
+ create mode 100644 media/libmedia/MediaUtils.cpp
+ create mode 100644 media/libmedia/MediaUtils.h
+
+diff --git a/media/libmedia/Android.mk b/media/libmedia/Android.mk
+index a3c3d3c..9f836f0 100644
+--- a/media/libmedia/Android.mk
++++ b/media/libmedia/Android.mk
+@@ -44,6 +44,7 @@ LOCAL_SRC_FILES:= \
+     IResourceManagerService.cpp \
+     IStreamSource.cpp \
+     MediaCodecInfo.cpp \
++    MediaUtils.cpp \
+     Metadata.cpp \
+     mediarecorder.cpp \
+     IMediaMetadataRetriever.cpp \
+diff --git a/media/libmedia/MediaUtils.cpp b/media/libmedia/MediaUtils.cpp
+new file mode 100644
+index 0000000..a02ca65
+--- /dev/null
++++ b/media/libmedia/MediaUtils.cpp
+@@ -0,0 +1,74 @@
++/*
++ * Copyright (C) 2016 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#define LOG_TAG "MediaUtils"
++#define LOG_NDEBUG 0
++#include <utils/Log.h>
++
++#include <cutils/properties.h>
++#include <sys/resource.h>
++#include <unistd.h>
++
++#include "MediaUtils.h"
++
++namespace android {
++
++void limitProcessMemory(
++    const char *property,
++    size_t numberOfBytes,
++    size_t percentageOfTotalMem) {
++
++    long pageSize = sysconf(_SC_PAGESIZE);
++    long numPages = sysconf(_SC_PHYS_PAGES);
++    size_t maxMem = SIZE_MAX;
++
++    if (pageSize > 0 && numPages > 0) {
++        if (size_t(numPages) < SIZE_MAX / size_t(pageSize)) {
++            maxMem = size_t(numPages) * size_t(pageSize);
++        }
++        ALOGV("physMem: %zu", maxMem);
++        if (percentageOfTotalMem > 100) {
++            ALOGW("requested %zu%% of total memory, using 100%%", percentageOfTotalMem);
++            percentageOfTotalMem = 100;
++        }
++        maxMem = maxMem / 100 * percentageOfTotalMem;
++        if (numberOfBytes < maxMem) {
++            maxMem = numberOfBytes;
++        }
++        ALOGV("requested limit: %zu", maxMem);
++    } else {
++        ALOGW("couldn't determine total RAM");
++    }
++
++    int64_t propVal = property_get_int64(property, maxMem);
++    if (propVal > 0 && uint64_t(propVal) <= SIZE_MAX) {
++        maxMem = propVal;
++    }
++    ALOGV("actual limit: %zu", maxMem);
++
++    struct rlimit limit;
++    getrlimit(RLIMIT_AS, &limit);
++    ALOGV("original limits: %lld/%lld", (long long)limit.rlim_cur, (long long)limit.rlim_max);
++    limit.rlim_cur = maxMem;
++    setrlimit(RLIMIT_AS, &limit);
++    limit.rlim_cur = -1;
++    limit.rlim_max = -1;
++    getrlimit(RLIMIT_AS, &limit);
++    ALOGV("new limits: %lld/%lld", (long long)limit.rlim_cur, (long long)limit.rlim_max);
++
++}
++
++} // namespace android
+diff --git a/media/libmedia/MediaUtils.h b/media/libmedia/MediaUtils.h
+new file mode 100644
+index 0000000..f80dd30
+--- /dev/null
++++ b/media/libmedia/MediaUtils.h
+@@ -0,0 +1,35 @@
++/*
++ * Copyright (C) 2016 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#ifndef _MEDIA_UTILS_H
++#define _MEDIA_UTILS_H
++
++namespace android {
++
++/**
++   Limit the amount of memory a process can allocate using setrlimit(RLIMIT_AS).
++   The value to use will be read from the specified system property, or if the
++   property doesn't exist it will use the specified number of bytes or the
++   specified percentage of total memory, whichever is smaller.
++*/
++void limitProcessMemory(
++    const char *property,
++    size_t numberOfBytes,
++    size_t percentageOfTotalMem);
++
++}   // namespace android
++
++#endif  // _MEDIA_UTILS_H
+diff --git a/media/mediaserver/Android.mk b/media/mediaserver/Android.mk
+index b6de0d9..7e017b9 100644
+--- a/media/mediaserver/Android.mk
++++ b/media/mediaserver/Android.mk
+@@ -37,6 +37,7 @@ LOCAL_STATIC_LIBRARIES := \
+
+ LOCAL_C_INCLUDES := \
+     frameworks/av/media/libmediaplayerservice \
++    frameworks/av/media/libmedia \
+     frameworks/av/services/medialog \
+     frameworks/av/services/audioflinger \
+     frameworks/av/services/audiopolicy \
+diff --git a/media/mediaserver/main_mediaserver.cpp b/media/mediaserver/main_mediaserver.cpp
+index 4a485ed..8cc9508 100644
+--- a/media/mediaserver/main_mediaserver.cpp
++++ b/media/mediaserver/main_mediaserver.cpp
+@@ -36,6 +36,7 @@
+ #include "MediaPlayerService.h"
+ #include "ResourceManagerService.h"
+ #include "service/AudioPolicyService.h"
++#include "MediaUtils.h"
+ #include "SoundTriggerHwService.h"
+ #include "RadioService.h"
+
+@@ -43,6 +44,11 @@ using namespace android;
+
+ int main(int argc __unused, char** argv)
+ {
++    limitProcessMemory(
++        "ro.media.maxmem", /* property that defines limit */
++        SIZE_MAX, /* upper limit in bytes */
++        65 /* upper limit as percentage of physical RAM */);
++
+     signal(SIGPIPE, SIG_IGN);
+     char value[PROPERTY_VALUE_MAX];
+     bool doLog = (property_get("ro.test_harness", value, "0") > 0) && (atoi(value) == 1);
+
+From f81038006b4c59a5a148dcad887371206033c28f Mon Sep 17 00:00:00 2001
+From: Wei Jia <wjia@google.com>
+Date: Fri, 28 Aug 2015 10:35:35 -0700
+Subject: [PATCH 07/60] MPEG4Extractor: ensure kKeyTrackID exists before
+ creating an MPEG4Source as track.
+
+GenericSource: return error when no track exists.
+
+SampleIterator: make sure mSamplesPerChunk is not zero before using it as divisor.
+
+Bug: 21657957
+Bug: 23705695
+Bug: 22802344
+Bug: 28799341
+Change-Id: I7664992ade90b935d3f255dcd43ecc2898f30b04
+(cherry picked from commit 0386c91b8a910a134e5898ffa924c1b6c7560b13)
+---
+ .../nuplayer/GenericSource.cpp                     | 34 +++++++++++++---------
+ media/libstagefright/MPEG4Extractor.cpp            |  8 +++++
+ media/libstagefright/SampleIterator.cpp            |  5 ++++
+ 3 files changed, 33 insertions(+), 14 deletions(-)
+
+diff --git a/media/libmediaplayerservice/nuplayer/GenericSource.cpp b/media/libmediaplayerservice/nuplayer/GenericSource.cpp
+index 45da218..0598254 100644
+--- a/media/libmediaplayerservice/nuplayer/GenericSource.cpp
++++ b/media/libmediaplayerservice/nuplayer/GenericSource.cpp
+@@ -211,6 +211,9 @@ status_t NuPlayer::GenericSource::initFromDataSource() {
+
+     for (size_t i = 0; i < numtracks; ++i) {
+         sp<MediaSource> track = extractor->getTrack(i);
++        if (track == NULL) {
++            continue;
++        }
+
+         sp<MetaData> meta = extractor->getTrackMetaData(i);
+
+@@ -253,24 +256,27 @@ status_t NuPlayer::GenericSource::initFromDataSource() {
+             }
+         }
+
+-        if (track != NULL) {
+-            mSources.push(track);
+-            int64_t durationUs;
+-            if (meta->findInt64(kKeyDuration, &durationUs)) {
+-                if (durationUs > mDurationUs) {
+-                    mDurationUs = durationUs;
+-                }
++        mSources.push(track);
++        int64_t durationUs;
++        if (meta->findInt64(kKeyDuration, &durationUs)) {
++            if (durationUs > mDurationUs) {
++                mDurationUs = durationUs;
+             }
++        }
+
+-            int32_t bitrate;
+-            if (totalBitrate >= 0 && meta->findInt32(kKeyBitRate, &bitrate)) {
+-                totalBitrate += bitrate;
+-            } else {
+-                totalBitrate = -1;
+-            }
++        int32_t bitrate;
++        if (totalBitrate >= 0 && meta->findInt32(kKeyBitRate, &bitrate)) {
++            totalBitrate += bitrate;
++        } else {
++            totalBitrate = -1;
+         }
+     }
+
++    if (mSources.size() == 0) {
++        ALOGE("b/23705695");
++        return UNKNOWN_ERROR;
++    }
++
+     mBitrate = totalBitrate;
+
+     return OK;
+@@ -318,7 +324,7 @@ int64_t NuPlayer::GenericSource::getLastReadPosition() {
+
+ status_t NuPlayer::GenericSource::setBuffers(
+         bool audio, Vector<MediaBuffer *> &buffers) {
+-    if (mIsSecure && !audio) {
++    if (mIsWidevine && !audio && mVideoTrack.mSource != NULL) {
+         return mVideoTrack.mSource->setBuffers(buffers);
+     }
+     return INVALID_OPERATION;
+diff --git a/media/libstagefright/MPEG4Extractor.cpp b/media/libstagefright/MPEG4Extractor.cpp
+index f6206d2..4c10cc9 100755
+--- a/media/libstagefright/MPEG4Extractor.cpp
++++ b/media/libstagefright/MPEG4Extractor.cpp
+@@ -933,6 +933,11 @@ status_t MPEG4Extractor::parseChunk(off64_t *offset, int depth) {
+             }
+
+             if (isTrack) {
++                int32_t trackId;
++                // There must be exact one track header per track.
++                if (!mLastTrack->meta->findInt32(kKeyTrackID, &trackId)) {
++                    mLastTrack->skipTrack = true;
++                }
+                 if (mLastTrack->skipTrack) {
+                     Track *cur = mFirstTrack;
+
+@@ -2869,6 +2874,9 @@ sp<MediaSource> MPEG4Extractor::getTrack(size_t index) {
+                 break;
+             }
+         }
++    } else {
++        ALOGE("b/21657957");
++        return NULL;
+     }
+
+     ALOGV("getTrack called, pssh: %zu", mPssh.size());
+diff --git a/media/libstagefright/SampleIterator.cpp b/media/libstagefright/SampleIterator.cpp
+index 2748349..c5f359e 100644
+--- a/media/libstagefright/SampleIterator.cpp
++++ b/media/libstagefright/SampleIterator.cpp
+@@ -84,6 +84,11 @@ status_t SampleIterator::seekTo(uint32_t sampleIndex) {
+
+     CHECK(sampleIndex < mStopChunkSampleIndex);
+
++    if (mSamplesPerChunk == 0) {
++        ALOGE("b/22802344");
++        return ERROR_MALFORMED;
++    }
++
+     uint32_t chunk =
+         (sampleIndex - mFirstChunkSampleIndex) / mSamplesPerChunk
+         + mFirstChunk;
+
+From d112f7d0c1dbaf0368365885becb11ca8d3f13a4 Mon Sep 17 00:00:00 2001
+From: Dave Weinstein <olorin@google.com>
+Date: Tue, 14 Jun 2016 11:05:01 -0700
+Subject: [PATCH 08/60] Resolve a merge issue between lmp and lmp-mr1+
+
+Change-Id: I336cb003fb7f50fd7d95c30ca47e45530a7ad503
+(cherry picked from commit 33f6da1092834f1e4be199cfa3b6310d66b521c0)
+(cherry picked from commit bb3a0338b58fafb01ac5b34efc450b80747e71e4)
+---
+ media/libmediaplayerservice/nuplayer/GenericSource.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/media/libmediaplayerservice/nuplayer/GenericSource.cpp b/media/libmediaplayerservice/nuplayer/GenericSource.cpp
+index 0598254..e8c28d5 100644
+--- a/media/libmediaplayerservice/nuplayer/GenericSource.cpp
++++ b/media/libmediaplayerservice/nuplayer/GenericSource.cpp
+@@ -324,7 +324,7 @@ int64_t NuPlayer::GenericSource::getLastReadPosition() {
+
+ status_t NuPlayer::GenericSource::setBuffers(
+         bool audio, Vector<MediaBuffer *> &buffers) {
+-    if (mIsWidevine && !audio && mVideoTrack.mSource != NULL) {
++    if (mIsSecure && !audio && mVideoTrack.mSource != NULL) {
+         return mVideoTrack.mSource->setBuffers(buffers);
+     }
+     return INVALID_OPERATION;
+
+From 590d1729883f700ab905cdc9ad850f3ddd7e1f56 Mon Sep 17 00:00:00 2001
+From: Marco Nelissen <marcone@google.com>
+Date: Tue, 7 Jun 2016 15:48:07 -0700
+Subject: [PATCH 09/60] Fix potential overflow
+
+Bug: 28533562
+Change-Id: I798ab24caa4c81f3ba564cad7c9ee019284fb702
+---
+ media/libstagefright/codecs/on2/h264dec/source/h264bsd_dpb.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/media/libstagefright/codecs/on2/h264dec/source/h264bsd_dpb.c b/media/libstagefright/codecs/on2/h264dec/source/h264bsd_dpb.c
+index 9517d0a..799bd16 100644
+--- a/media/libstagefright/codecs/on2/h264dec/source/h264bsd_dpb.c
++++ b/media/libstagefright/codecs/on2/h264dec/source/h264bsd_dpb.c
+@@ -60,6 +60,7 @@
+ #include "h264bsd_util.h"
+ #include "basetype.h"
+
++#include <log/log.h>
+ /*------------------------------------------------------------------------------
+     2. External compiler flags
+ --------------------------------------------------------------------------------
+@@ -998,6 +999,13 @@ u32 h264bsdInitDpb(
+     ASSERT(maxFrameNum);
+     ASSERT(dpbSize);
+
++    // see comment in loop below about size calculation
++    if (picSizeInMbs > (UINT32_MAX - 32 - 15) / 384) {
++        ALOGE("b/28533562");
++        android_errorWriteLog(0x534e4554, "28533562");
++        return(MEMORY_ALLOCATION_ERROR);
++    }
++
+     dpb->maxLongTermFrameIdx = NO_LONG_TERM_FRAME_INDICES;
+     dpb->maxRefFrames        = MAX(maxRefFrames, 1);
+     if (noReordering)
+
+From 8e438e153f661e9df8db0ac41d587e940352df06 Mon Sep 17 00:00:00 2001
+From: Marco Nelissen <marcone@google.com>
+Date: Wed, 8 Jun 2016 14:31:42 -0700
+Subject: [PATCH 10/60] SoftAAC2: fix crash on all-zero adts buffer
+
+Bug: 29153599
+Change-Id: I1cb81c054098b86cf24f024f8479909ca7bc85a6
+---
+ media/libstagefright/codecs/aacdec/SoftAAC2.cpp | 15 +++++++++------
+ 1 file changed, 9 insertions(+), 6 deletions(-)
+
+diff --git a/media/libstagefright/codecs/aacdec/SoftAAC2.cpp b/media/libstagefright/codecs/aacdec/SoftAAC2.cpp
+index 520ecb4..8ddff90 100644
+--- a/media/libstagefright/codecs/aacdec/SoftAAC2.cpp
++++ b/media/libstagefright/codecs/aacdec/SoftAAC2.cpp
+@@ -625,12 +625,15 @@ void SoftAAC2::onQueueFilled(OMX_U32 /* portIndex */) {
+                         signalError = true;
+                     } else {
+                         adtsHeaderSize = (protectionAbsent ? 7 : 9);
+-
+-                        inBuffer[0] = (UCHAR *)adtsHeader + adtsHeaderSize;
+-                        inBufferLength[0] = aac_frame_length - adtsHeaderSize;
+-
+-                        inHeader->nOffset += adtsHeaderSize;
+-                        inHeader->nFilledLen -= adtsHeaderSize;
++                        if (aac_frame_length < adtsHeaderSize) {
++                            signalError = true;
++                        } else {
++                            inBuffer[0] = (UCHAR *)adtsHeader + adtsHeaderSize;
++                            inBufferLength[0] = aac_frame_length - adtsHeaderSize;
++
++                            inHeader->nOffset += adtsHeaderSize;
++                            inHeader->nFilledLen -= adtsHeaderSize;
++                        }
+                     }
+                 }
+
+
+From 42a25c46b844518ff0d0b920c20c519e1417be69 Mon Sep 17 00:00:00 2001
+From: Marco Nelissen <marcone@google.com>
+Date: Tue, 7 Jun 2016 12:26:43 -0700
+Subject: [PATCH 11/60] Don't use sp<>&
+
+because they may end up pointing to NULL after a NULL check was performed.
+
+Bug: 28166152
+Change-Id: Iab2ea30395b620628cc6f3d067dd4f6fcda824fe
+---
+ include/media/IMediaDeathNotifier.h    | 2 +-
+ media/libmedia/IMediaDeathNotifier.cpp | 2 +-
+ media/libmedia/mediaplayer.cpp         | 6 +++---
+ media/libmedia/mediarecorder.cpp       | 2 +-
+ 4 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/include/media/IMediaDeathNotifier.h b/include/media/IMediaDeathNotifier.h
+index bb3d0d8..aca6678 100644
+--- a/include/media/IMediaDeathNotifier.h
++++ b/include/media/IMediaDeathNotifier.h
+@@ -30,7 +30,7 @@ class IMediaDeathNotifier: virtual public RefBase
+     virtual ~IMediaDeathNotifier() { removeObitRecipient(this); }
+
+     virtual void died() = 0;
+-    static const sp<IMediaPlayerService>& getMediaPlayerService();
++    static const sp<IMediaPlayerService> getMediaPlayerService();
+
+ private:
+     IMediaDeathNotifier &operator=(const IMediaDeathNotifier &);
+diff --git a/media/libmedia/IMediaDeathNotifier.cpp b/media/libmedia/IMediaDeathNotifier.cpp
+index d4360ea..c43ef66 100644
+--- a/media/libmedia/IMediaDeathNotifier.cpp
++++ b/media/libmedia/IMediaDeathNotifier.cpp
+@@ -31,7 +31,7 @@ sp<IMediaDeathNotifier::DeathNotifier> IMediaDeathNotifier::sDeathNotifier;
+ SortedVector< wp<IMediaDeathNotifier> > IMediaDeathNotifier::sObitRecipients;
+
+ // establish binder interface to MediaPlayerService
+-/*static*/const sp<IMediaPlayerService>&
++/*static*/const sp<IMediaPlayerService>
+ IMediaDeathNotifier::getMediaPlayerService()
+ {
+     ALOGV("getMediaPlayerService");
+diff --git a/media/libmedia/mediaplayer.cpp b/media/libmedia/mediaplayer.cpp
+index 502ab2d..dcce3cc 100644
+--- a/media/libmedia/mediaplayer.cpp
++++ b/media/libmedia/mediaplayer.cpp
+@@ -152,7 +152,7 @@ status_t MediaPlayer::setDataSource(
+     ALOGV("setDataSource(%s)", url);
+     status_t err = BAD_VALUE;
+     if (url != NULL) {
+-        const sp<IMediaPlayerService>& service(getMediaPlayerService());
++        const sp<IMediaPlayerService> service(getMediaPlayerService());
+         if (service != 0) {
+             sp<IMediaPlayer> player(service->create(this, mAudioSessionId));
+             if ((NO_ERROR != doSetRetransmitEndpoint(player)) ||
+@@ -169,7 +169,7 @@ status_t MediaPlayer::setDataSource(int fd, int64_t offset, int64_t length)
+ {
+     ALOGV("setDataSource(%d, %" PRId64 ", %" PRId64 ")", fd, offset, length);
+     status_t err = UNKNOWN_ERROR;
+-    const sp<IMediaPlayerService>& service(getMediaPlayerService());
++    const sp<IMediaPlayerService> service(getMediaPlayerService());
+     if (service != 0) {
+         sp<IMediaPlayer> player(service->create(this, mAudioSessionId));
+         if ((NO_ERROR != doSetRetransmitEndpoint(player)) ||
+@@ -185,7 +185,7 @@ status_t MediaPlayer::setDataSource(const sp<IStreamSource> &source)
+ {
+     ALOGV("setDataSource");
+     status_t err = UNKNOWN_ERROR;
+-    const sp<IMediaPlayerService>& service(getMediaPlayerService());
++    const sp<IMediaPlayerService> service(getMediaPlayerService());
+     if (service != 0) {
+         sp<IMediaPlayer> player(service->create(this, mAudioSessionId));
+         if ((NO_ERROR != doSetRetransmitEndpoint(player)) ||
+diff --git a/media/libmedia/mediarecorder.cpp b/media/libmedia/mediarecorder.cpp
+index 8bbd8f1..0eb7de5 100644
+--- a/media/libmedia/mediarecorder.cpp
++++ b/media/libmedia/mediarecorder.cpp
+@@ -617,7 +617,7 @@ MediaRecorder::MediaRecorder(const String16& opPackageName) : mSurfaceMediaSourc
+ {
+     ALOGV("constructor");
+
+-    const sp<IMediaPlayerService>& service(getMediaPlayerService());
++    const sp<IMediaPlayerService> service(getMediaPlayerService());
+     if (service != NULL) {
+         mMediaRecorder = service->createMediaRecorder(opPackageName);
+     }
+
+From a4567c66f4764442c6cb7b5c1858810194480fb5 Mon Sep 17 00:00:00 2001
+From: Harish Mahendrakar <harish.mahendrakar@ittiam.com>
+Date: Mon, 12 Oct 2015 19:24:18 +0530
+Subject: [PATCH 12/60] SoftHEVC: Exit gracefully in case of decoder errors
+
+Exit for error in allocation and unsupported resolutions
+
+Bug: 28816956
+
+Change-Id: Ieb830bedeb3a7431d1d21a024927df630f7eda1e
+---
+ media/libstagefright/codecs/hevcdec/SoftHEVC.cpp | 22 ++++++++++++++++++++++
+ 1 file changed, 22 insertions(+)
+
+diff --git a/media/libstagefright/codecs/hevcdec/SoftHEVC.cpp b/media/libstagefright/codecs/hevcdec/SoftHEVC.cpp
+index a70755c..1dac868 100644
+--- a/media/libstagefright/codecs/hevcdec/SoftHEVC.cpp
++++ b/media/libstagefright/codecs/hevcdec/SoftHEVC.cpp
+@@ -444,6 +444,9 @@ void SoftHEVC::onQueueFilled(OMX_U32 portIndex) {
+
+     if (NULL == mCodecCtx) {
+         if (OK != initDecoder()) {
++            ALOGE("Failed to initialize decoder");
++            notify(OMX_EventError, OMX_ErrorUnsupportedSetting, 0, NULL);
++            mSignalledError = true;
+             return;
+         }
+     }
+@@ -540,6 +543,25 @@ void SoftHEVC::onQueueFilled(OMX_U32 portIndex) {
+             IV_API_CALL_STATUS_T status;
+             status = ivdec_api_function(mCodecCtx, (void *)&s_dec_ip, (void *)&s_dec_op);
+
++            bool unsupportedResolution =
++                (IVD_STREAM_WIDTH_HEIGHT_NOT_SUPPORTED == (s_dec_op.u4_error_code & 0xFF));
++
++            /* Check for unsupported dimensions */
++            if (unsupportedResolution) {
++                ALOGE("Unsupported resolution : %dx%d", mWidth, mHeight);
++                notify(OMX_EventError, OMX_ErrorUnsupportedSetting, 0, NULL);
++                mSignalledError = true;
++                return;
++            }
++
++            bool allocationFailed = (IVD_MEM_ALLOC_FAILED == (s_dec_op.u4_error_code & 0xFF));
++            if (allocationFailed) {
++                ALOGE("Allocation failure in decoder");
++                notify(OMX_EventError, OMX_ErrorUnsupportedSetting, 0, NULL);
++                mSignalledError = true;
++                return;
++            }
++
+             bool resChanged = (IVD_RES_CHANGED == (s_dec_op.u4_error_code & 0xFF));
+
+             GETTIME(&mTimeEnd, NULL);
+
+From 9cd8c3289c91254b3955bd7347cf605d6fa032c6 Mon Sep 17 00:00:00 2001
+From: Andy Hung <hunga@google.com>
+Date: Mon, 20 Jun 2016 15:22:52 -0700
+Subject: [PATCH 13/60] Check effect command reply size in AudioFlinger
+
+Bug: 29251553
+Change-Id: I1bcc1281f1f0542bb645f6358ce31631f2a8ffbf
+---
+ services/audioflinger/Effects.cpp | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/services/audioflinger/Effects.cpp b/services/audioflinger/Effects.cpp
+index 949c91d..eb52dee 100644
+--- a/services/audioflinger/Effects.cpp
++++ b/services/audioflinger/Effects.cpp
+@@ -558,6 +558,12 @@ status_t AudioFlinger::EffectModule::command(uint32_t cmdCode,
+     if (mStatus != NO_ERROR) {
+         return mStatus;
+     }
++    if (cmdCode == EFFECT_CMD_GET_PARAM &&
++            (*replySize < sizeof(effect_param_t) ||
++                    ((effect_param_t *)pCmdData)->psize > *replySize - sizeof(effect_param_t))) {
++        android_errorWriteLog(0x534e4554, "29251553");
++        return -EINVAL;
++    }
+     status_t status = (*mEffectInterface)->command(mEffectInterface,
+                                                    cmdCode,
+                                                    cmdSize,
+
+From b351eabb428c7ca85a34513c64601f437923d576 Mon Sep 17 00:00:00 2001
+From: Wonsik Kim <wonsik@google.com>
+Date: Wed, 25 May 2016 16:54:08 +0900
+Subject: [PATCH 14/60] DO NOT MERGE omx: check buffer port before using
+
+Bug: 28816827
+Change-Id: I3d5bad4a1ef96dec544b05bb31cc6f7109aae0a5
+---
+ media/libstagefright/include/OMXNodeInstance.h |  2 +-
+ media/libstagefright/omx/OMXNodeInstance.cpp   | 73 +++++++++++++++++++-------
+ 2 files changed, 55 insertions(+), 20 deletions(-)
+
+diff --git a/media/libstagefright/include/OMXNodeInstance.h b/media/libstagefright/include/OMXNodeInstance.h
+index e5fb45b..babf5b7 100644
+--- a/media/libstagefright/include/OMXNodeInstance.h
++++ b/media/libstagefright/include/OMXNodeInstance.h
+@@ -187,7 +187,7 @@ struct OMXNodeInstance {
+
+     // For buffer id management
+     OMX::buffer_id makeBufferID(OMX_BUFFERHEADERTYPE *bufferHeader);
+-    OMX_BUFFERHEADERTYPE *findBufferHeader(OMX::buffer_id buffer);
++    OMX_BUFFERHEADERTYPE *findBufferHeader(OMX::buffer_id buffer, OMX_U32 portIndex);
+     OMX::buffer_id findBufferID(OMX_BUFFERHEADERTYPE *bufferHeader);
+     void invalidateBufferID(OMX::buffer_id buffer);
+
+diff --git a/media/libstagefright/omx/OMXNodeInstance.cpp b/media/libstagefright/omx/OMXNodeInstance.cpp
+index 8735eff..7f534b5 100644
+--- a/media/libstagefright/omx/OMXNodeInstance.cpp
++++ b/media/libstagefright/omx/OMXNodeInstance.cpp
+@@ -101,19 +101,22 @@ static void InitOMXParams(T *params) {
+ namespace android {
+
+ struct BufferMeta {
+-    BufferMeta(const sp<IMemory> &mem, bool is_backup = false)
++    BufferMeta(const sp<IMemory> &mem, OMX_U32 portIndex, bool is_backup = false)
+         : mMem(mem),
+-          mIsBackup(is_backup) {
++          mIsBackup(is_backup),
++          mPortIndex(portIndex) {
+     }
+
+-    BufferMeta(size_t size)
++    BufferMeta(size_t size, OMX_U32 portIndex)
+         : mSize(size),
+-          mIsBackup(false) {
++          mIsBackup(false),
++          mPortIndex(portIndex) {
+     }
+
+-    BufferMeta(const sp<GraphicBuffer> &graphicBuffer)
++    BufferMeta(const sp<GraphicBuffer> &graphicBuffer, OMX_U32 portIndex)
+         : mGraphicBuffer(graphicBuffer),
+-          mIsBackup(false) {
++          mIsBackup(false),
++          mPortIndex(portIndex) {
+     }
+
+     void CopyFromOMX(const OMX_BUFFERHEADERTYPE *header) {
+@@ -160,11 +163,16 @@ struct BufferMeta {
+         mGraphicBuffer = graphicBuffer;
+     }
+
++    OMX_U32 getPortIndex() {
++        return mPortIndex;
++    }
++
+ private:
+     sp<GraphicBuffer> mGraphicBuffer;
+     sp<IMemory> mMem;
+     size_t mSize;
+     bool mIsBackup;
++    OMX_U32 mPortIndex;
+
+     BufferMeta(const BufferMeta &);
+     BufferMeta &operator=(const BufferMeta &);
+@@ -661,7 +669,7 @@ status_t OMXNodeInstance::useBuffer(
+         return BAD_VALUE;
+     }
+
+-    BufferMeta *buffer_meta = new BufferMeta(params);
++    BufferMeta *buffer_meta = new BufferMeta(params, portIndex);
+
+     OMX_BUFFERHEADERTYPE *header;
+
+@@ -713,7 +721,7 @@ status_t OMXNodeInstance::useGraphicBuffer2_l(
+         return UNKNOWN_ERROR;
+     }
+
+-    BufferMeta *bufferMeta = new BufferMeta(graphicBuffer);
++    BufferMeta *bufferMeta = new BufferMeta(graphicBuffer, portIndex);
+
+     OMX_BUFFERHEADERTYPE *header = NULL;
+     OMX_U8* bufferHandle = const_cast<OMX_U8*>(
+@@ -771,7 +779,7 @@ status_t OMXNodeInstance::useGraphicBuffer(
+         return StatusFromOMXError(err);
+     }
+
+-    BufferMeta *bufferMeta = new BufferMeta(graphicBuffer);
++    BufferMeta *bufferMeta = new BufferMeta(graphicBuffer, portIndex);
+
+     OMX_BUFFERHEADERTYPE *header;
+
+@@ -812,6 +820,9 @@ status_t OMXNodeInstance::useGraphicBuffer(
+ status_t OMXNodeInstance::updateGraphicBufferInMeta_l(
+         OMX_U32 portIndex, const sp<GraphicBuffer>& graphicBuffer,
+         OMX::buffer_id buffer, OMX_BUFFERHEADERTYPE *header) {
++    if (header == NULL) {
++        return BAD_VALUE;
++    }
+     if (portIndex != kPortIndexInput && portIndex != kPortIndexOutput) {
+         return BAD_VALUE;
+     }
+@@ -845,7 +856,7 @@ status_t OMXNodeInstance::updateGraphicBufferInMeta(
+         OMX_U32 portIndex, const sp<GraphicBuffer>& graphicBuffer,
+         OMX::buffer_id buffer) {
+     Mutex::Autolock autoLock(mLock);
+-    OMX_BUFFERHEADERTYPE *header = findBufferHeader(buffer);
++    OMX_BUFFERHEADERTYPE *header = findBufferHeader(buffer, portIndex);
+     return updateGraphicBufferInMeta_l(portIndex, graphicBuffer, buffer, header);
+ }
+
+@@ -974,7 +985,7 @@ status_t OMXNodeInstance::allocateBuffer(
+         void **buffer_data) {
+     Mutex::Autolock autoLock(mLock);
+
+-    BufferMeta *buffer_meta = new BufferMeta(size);
++    BufferMeta *buffer_meta = new BufferMeta(size, portIndex);
+
+     OMX_BUFFERHEADERTYPE *header;
+
+@@ -1015,7 +1026,7 @@ status_t OMXNodeInstance::allocateBufferWithBackup(
+         return BAD_VALUE;
+     }
+
+-    BufferMeta *buffer_meta = new BufferMeta(params, true);
++    BufferMeta *buffer_meta = new BufferMeta(params, portIndex, true);
+
+     OMX_BUFFERHEADERTYPE *header;
+
+@@ -1056,7 +1067,10 @@ status_t OMXNodeInstance::freeBuffer(
+
+     removeActiveBuffer(portIndex, buffer);
+
+-    OMX_BUFFERHEADERTYPE *header = findBufferHeader(buffer);
++    OMX_BUFFERHEADERTYPE *header = findBufferHeader(buffer, portIndex);
++    if (header == NULL) {
++        return BAD_VALUE;
++    }
+     BufferMeta *buffer_meta = static_cast<BufferMeta *>(header->pAppPrivate);
+
+     OMX_ERRORTYPE err = OMX_FreeBuffer(mHandle, portIndex, header);
+@@ -1072,7 +1086,10 @@ status_t OMXNodeInstance::freeBuffer(
+ status_t OMXNodeInstance::fillBuffer(OMX::buffer_id buffer, int fenceFd) {
+     Mutex::Autolock autoLock(mLock);
+
+-    OMX_BUFFERHEADERTYPE *header = findBufferHeader(buffer);
++    OMX_BUFFERHEADERTYPE *header = findBufferHeader(buffer, kPortIndexOutput);
++    if (header == NULL) {
++        return BAD_VALUE;
++    }
+     header->nFilledLen = 0;
+     header->nOffset = 0;
+     header->nFlags = 0;
+@@ -1105,7 +1122,10 @@ status_t OMXNodeInstance::emptyBuffer(
+         OMX_U32 flags, OMX_TICKS timestamp, int fenceFd) {
+     Mutex::Autolock autoLock(mLock);
+
+-    OMX_BUFFERHEADERTYPE *header = findBufferHeader(buffer);
++    OMX_BUFFERHEADERTYPE *header = findBufferHeader(buffer, kPortIndexInput);
++    if (header == NULL) {
++        return BAD_VALUE;
++    }
+     BufferMeta *buffer_meta =
+         static_cast<BufferMeta *>(header->pAppPrivate);
+     sp<ABuffer> backup = buffer_meta->getBuffer(header, true /* backup */, false /* limit */);
+@@ -1385,7 +1405,10 @@ bool OMXNodeInstance::handleMessage(omx_message &msg) {
+
+     if (msg.type == omx_message::FILL_BUFFER_DONE) {
+         OMX_BUFFERHEADERTYPE *buffer =
+-            findBufferHeader(msg.u.extended_buffer_data.buffer);
++            findBufferHeader(msg.u.extended_buffer_data.buffer, kPortIndexOutput);
++        if (buffer == NULL) {
++            return false;
++        }
+
+         {
+             Mutex::Autolock _l(mDebugLock);
+@@ -1416,7 +1439,10 @@ bool OMXNodeInstance::handleMessage(omx_message &msg) {
+         }
+     } else if (msg.type == omx_message::EMPTY_BUFFER_DONE) {
+         OMX_BUFFERHEADERTYPE *buffer =
+-            findBufferHeader(msg.u.buffer_data.buffer);
++            findBufferHeader(msg.u.buffer_data.buffer, kPortIndexInput);
++        if (buffer == NULL) {
++            return false;
++        }
+
+         {
+             Mutex::Autolock _l(mDebugLock);
+@@ -1613,7 +1639,8 @@ OMX::buffer_id OMXNodeInstance::makeBufferID(OMX_BUFFERHEADERTYPE *bufferHeader)
+     return buffer;
+ }
+
+-OMX_BUFFERHEADERTYPE *OMXNodeInstance::findBufferHeader(OMX::buffer_id buffer) {
++OMX_BUFFERHEADERTYPE *OMXNodeInstance::findBufferHeader(
++        OMX::buffer_id buffer, OMX_U32 portIndex) {
+     if (buffer == 0) {
+         return NULL;
+     }
+@@ -1623,7 +1650,15 @@ OMX_BUFFERHEADERTYPE *OMXNodeInstance::findBufferHeader(OMX::buffer_id buffer) {
+         CLOGW("findBufferHeader: buffer %u not found", buffer);
+         return NULL;
+     }
+-    return mBufferIDToBufferHeader.valueAt(index);
++    OMX_BUFFERHEADERTYPE *header = mBufferIDToBufferHeader.valueAt(index);
++    BufferMeta *buffer_meta =
++        static_cast<BufferMeta *>(header->pAppPrivate);
++    if (buffer_meta->getPortIndex() != portIndex) {
++        CLOGW("findBufferHeader: buffer %u found but with incorrect port index.", buffer);
++        android_errorWriteLog(0x534e4554, "28816827");
++        return NULL;
++    }
++    return header;
+ }
+
+ OMX::buffer_id OMXNodeInstance::findBufferID(OMX_BUFFERHEADERTYPE *bufferHeader) {
+
+From 1f24c730ab6ca5aff1e3137b340b8aeaeda4bdbc Mon Sep 17 00:00:00 2001
+From: Eino-Ville Talvala <etalvala@google.com>
+Date: Mon, 20 Jun 2016 17:00:14 -0700
+Subject: [PATCH 15/60] DO NOT MERGE: Camera: Adjust pointers to ANW buffers to
+ avoid infoleak
+
+Subtract address of a random static object from pointers being routed
+through app process.
+
+Bug: 28466701
+Change-Id: Idcbfe81e9507433769672f3dc6d67db5eeed4e04
+---
+ camera/ICameraRecordingProxy.cpp                   |  6 ++++-
+ include/camera/ICameraRecordingProxy.h             |  6 +++++
+ include/media/stagefright/CameraSource.h           |  3 +++
+ media/libstagefright/CameraSource.cpp              | 29 ++++++++++++++++++++++
+ .../api1/client2/StreamingProcessor.cpp            |  8 ++++++
+ 5 files changed, 51 insertions(+), 1 deletion(-)
+
+diff --git a/camera/ICameraRecordingProxy.cpp b/camera/ICameraRecordingProxy.cpp
+index 3dc0ffb..517b64f 100644
+--- a/camera/ICameraRecordingProxy.cpp
++++ b/camera/ICameraRecordingProxy.cpp
+@@ -31,6 +31,11 @@ enum {
+     RELEASE_RECORDING_FRAME,
+ };
+
++uint8_t ICameraRecordingProxy::baseObject = 0;
++
++size_t ICameraRecordingProxy::getCommonBaseAddress() {
++    return (size_t)&baseObject;
++}
+
+ class BpCameraRecordingProxy: public BpInterface<ICameraRecordingProxy>
+ {
+@@ -106,4 +111,3 @@ status_t BnCameraRecordingProxy::onTransact(
+ // ----------------------------------------------------------------------------
+
+ }; // namespace android
+-
+diff --git a/include/camera/ICameraRecordingProxy.h b/include/camera/ICameraRecordingProxy.h
+index 2aac284..4edf9cd 100644
+--- a/include/camera/ICameraRecordingProxy.h
++++ b/include/camera/ICameraRecordingProxy.h
+@@ -83,6 +83,12 @@ class ICameraRecordingProxy: public IInterface
+     virtual status_t        startRecording(const sp<ICameraRecordingProxyListener>& listener) = 0;
+     virtual void            stopRecording() = 0;
+     virtual void            releaseRecordingFrame(const sp<IMemory>& mem) = 0;
++
++    // b/28466701
++    static  size_t          getCommonBaseAddress();
++  private:
++
++    static  uint8_t         baseObject;
+ };
+
+ // ----------------------------------------------------------------------------
+diff --git a/include/media/stagefright/CameraSource.h b/include/media/stagefright/CameraSource.h
+index 069e897..6c938a5 100644
+--- a/include/media/stagefright/CameraSource.h
++++ b/include/media/stagefright/CameraSource.h
+@@ -236,6 +236,9 @@ class CameraSource : public MediaSource, public MediaBufferObserver {
+     status_t checkFrameRate(const CameraParameters& params,
+                     int32_t frameRate);
+
++    static void adjustIncomingANWBuffer(IMemory* data);
++    static void adjustOutgoingANWBuffer(IMemory* data);
++
+     void stopCameraRecording();
+     status_t reset();
+
+diff --git a/media/libstagefright/CameraSource.cpp b/media/libstagefright/CameraSource.cpp
+index 66280da..fa30644 100644
+--- a/media/libstagefright/CameraSource.cpp
++++ b/media/libstagefright/CameraSource.cpp
+@@ -27,8 +27,10 @@
+ #include <media/stagefright/MediaDefs.h>
+ #include <media/stagefright/MediaErrors.h>
+ #include <media/stagefright/MetaData.h>
++#include <media/hardware/HardwareAPI.h>
+ #include <camera/Camera.h>
+ #include <camera/CameraParameters.h>
++#include <camera/ICameraRecordingProxy.h>
+ #include <gui/Surface.h>
+ #include <utils/String8.h>
+ #include <cutils/properties.h>
+@@ -792,6 +794,8 @@ void CameraSource::releaseQueuedFrames() {
+     List<sp<IMemory> >::iterator it;
+     while (!mFramesReceived.empty()) {
+         it = mFramesReceived.begin();
++        // b/28466701
++        adjustOutgoingANWBuffer(it->get());
+         releaseRecordingFrame(*it);
+         mFramesReceived.erase(it);
+         ++mNumFramesDropped;
+@@ -812,6 +816,9 @@ void CameraSource::signalBufferReturned(MediaBuffer *buffer) {
+     for (List<sp<IMemory> >::iterator it = mFramesBeingEncoded.begin();
+          it != mFramesBeingEncoded.end(); ++it) {
+         if ((*it)->pointer() ==  buffer->data()) {
++            // b/28466701
++            adjustOutgoingANWBuffer(it->get());
++
+             releaseOneRecordingFrame((*it));
+             mFramesBeingEncoded.erase(it);
+             ++mNumFramesEncoded;
+@@ -917,6 +924,10 @@ void CameraSource::dataCallbackTimestamp(int64_t timestampUs,
+     ++mNumFramesReceived;
+
+     CHECK(data != NULL && data->size() > 0);
++
++    // b/28466701
++    adjustIncomingANWBuffer(data.get());
++
+     mFramesReceived.push_back(data);
+     int64_t timeUs = mStartTimeUs + (timestampUs - mFirstFrameTimeUs);
+     mFrameTimes.push_back(timeUs);
+@@ -930,6 +941,24 @@ bool CameraSource::isMetaDataStoredInVideoBuffers() const {
+     return mIsMetaDataStoredInVideoBuffers;
+ }
+
++void CameraSource::adjustIncomingANWBuffer(IMemory* data) {
++    VideoNativeMetadata *payload =
++            reinterpret_cast<VideoNativeMetadata*>(data->pointer());
++    if (payload->eType == kMetadataBufferTypeANWBuffer) {
++        payload->pBuffer = (ANativeWindowBuffer*)(((uint8_t*)payload->pBuffer) +
++                ICameraRecordingProxy::getCommonBaseAddress());
++    }
++}
++
++void CameraSource::adjustOutgoingANWBuffer(IMemory* data) {
++    VideoNativeMetadata *payload =
++            reinterpret_cast<VideoNativeMetadata*>(data->pointer());
++    if (payload->eType == kMetadataBufferTypeANWBuffer) {
++        payload->pBuffer = (ANativeWindowBuffer*)(((uint8_t*)payload->pBuffer) -
++                ICameraRecordingProxy::getCommonBaseAddress());
++    }
++}
++
+ CameraSource::ProxyListener::ProxyListener(const sp<CameraSource>& source) {
+     mSource = source;
+ }
+diff --git a/services/camera/libcameraservice/api1/client2/StreamingProcessor.cpp b/services/camera/libcameraservice/api1/client2/StreamingProcessor.cpp
+index 66d7b00..9e6c0db 100644
+--- a/services/camera/libcameraservice/api1/client2/StreamingProcessor.cpp
++++ b/services/camera/libcameraservice/api1/client2/StreamingProcessor.cpp
+@@ -30,6 +30,7 @@
+ #include <utils/Trace.h>
+ #include <gui/BufferItem.h>
+ #include <gui/Surface.h>
++#include <camera/ICameraRecordingProxy.h>
+ #include <media/hardware/HardwareAPI.h>
+
+ #include "common/CameraDeviceBase.h"
+@@ -826,6 +827,9 @@ status_t StreamingProcessor::processRecordingFrame() {
+             (uint8_t*)heap->getBase() + offset);
+         payload->eType = kMetadataBufferTypeANWBuffer;
+         payload->pBuffer = imgBuffer.mGraphicBuffer->getNativeBuffer();
++        // b/28466701
++        payload->pBuffer = (ANativeWindowBuffer*)((uint8_t*)payload->pBuffer -
++                ICameraRecordingProxy::getCommonBaseAddress());
+         payload->nFenceFd = -1;
+
+         ALOGVV("%s: Camera %d: Sending out ANWBuffer %p",
+@@ -874,6 +878,10 @@ void StreamingProcessor::releaseRecordingFrame(const sp<IMemory>& mem) {
+         return;
+     }
+
++    // b/28466701
++    payload->pBuffer = (ANativeWindowBuffer*)(((uint8_t*)payload->pBuffer) +
++            ICameraRecordingProxy::getCommonBaseAddress());
++
+     // Release the buffer back to the recording queue
+     size_t itemIndex;
+     for (itemIndex = 0; itemIndex < mRecordingBuffers.size(); itemIndex++) {
+
+From 940b28bc37f819c62386e393614354f55069e8f6 Mon Sep 17 00:00:00 2001
+From: Scott Mertz <scott@cyngn.com>
+Date: Wed, 6 Jul 2016 10:18:52 -0700
+Subject: [PATCH 16/60] Enforce permission for accessing fm tuner
+
+Change-Id: I13f3ba8fc9caaeee21597a2405a8c3629e985502
+---
+ services/audioflinger/ServiceUtilities.cpp                      | 8 ++++++++
+ services/audioflinger/ServiceUtilities.h                        | 1 +
+ services/audiopolicy/service/AudioPolicyInterfaceImpl.cpp       | 5 +++++
+ services/audiopolicy/service/AudioPolicyInterfaceImplLegacy.cpp | 4 ++++
+ 4 files changed, 18 insertions(+)
+
+diff --git a/services/audioflinger/ServiceUtilities.cpp b/services/audioflinger/ServiceUtilities.cpp
+index 2e68dad..031ff05 100644
+--- a/services/audioflinger/ServiceUtilities.cpp
++++ b/services/audioflinger/ServiceUtilities.cpp
+@@ -106,6 +106,14 @@ bool captureAudioOutputAllowed() {
+     return ok;
+ }
+
++bool accessFmRadioAllowed() {
++    static const String16 sAccessFmRadio("android.permission.ACCESS_FM_RADIO");
++    // IMPORTANT: Use PermissionCache - not a runtime permission and may not change.
++    bool ok = PermissionCache::checkCallingPermission(sAccessFmRadio);
++    if (!ok) ALOGE("Request requires android.permission.ACCESS_FM_RADIO");
++    return ok;
++}
++
+ bool captureHotwordAllowed() {
+     static const String16 sCaptureHotwordAllowed("android.permission.CAPTURE_AUDIO_HOTWORD");
+     // IMPORTANT: Use PermissionCache - not a runtime permission and may not change.
+diff --git a/services/audioflinger/ServiceUtilities.h b/services/audioflinger/ServiceUtilities.h
+index fba6dce..dffb114 100644
+--- a/services/audioflinger/ServiceUtilities.h
++++ b/services/audioflinger/ServiceUtilities.h
+@@ -21,6 +21,7 @@ namespace android {
+ extern pid_t getpid_cached;
+
+ bool recordingAllowed(const String16& opPackageName);
++bool accessFmRadioAllowed();
+ bool captureAudioOutputAllowed();
+ bool captureHotwordAllowed();
+ bool settingsAllowed();
+diff --git a/services/audiopolicy/service/AudioPolicyInterfaceImpl.cpp b/services/audiopolicy/service/AudioPolicyInterfaceImpl.cpp
+index f0be341..b23c35e 100644
+--- a/services/audiopolicy/service/AudioPolicyInterfaceImpl.cpp
++++ b/services/audiopolicy/service/AudioPolicyInterfaceImpl.cpp
+@@ -316,6 +316,11 @@ status_t AudioPolicyService::getInputForAttr(const audio_attributes_t *attr,
+     if ((attr->source == AUDIO_SOURCE_HOTWORD) && !captureHotwordAllowed()) {
+         return BAD_VALUE;
+     }
++
++    if ((attr->source == AUDIO_SOURCE_FM_TUNER) && !accessFmRadioAllowed()) {
++        return BAD_VALUE;
++    }
++
+     sp<AudioPolicyEffects>audioPolicyEffects;
+     status_t status;
+     AudioPolicyInterface::input_type_t inputType;
+diff --git a/services/audiopolicy/service/AudioPolicyInterfaceImplLegacy.cpp b/services/audiopolicy/service/AudioPolicyInterfaceImplLegacy.cpp
+index 0aad54d..da7f45d 100644
+--- a/services/audiopolicy/service/AudioPolicyInterfaceImplLegacy.cpp
++++ b/services/audiopolicy/service/AudioPolicyInterfaceImplLegacy.cpp
+@@ -275,6 +275,10 @@ status_t AudioPolicyService::getInputForAttr(const audio_attributes_t *attr,
+         return BAD_VALUE;
+     }
+
++    if ((inputSource == AUDIO_SOURCE_FM_TUNER) && !accessFmRadioAllowed()) {
++        return BAD_VALUE;
++    }
++
+ #ifdef HAVE_PRE_KITKAT_AUDIO_POLICY_BLOB
+     if (inputSource == AUDIO_SOURCE_HOTWORD)
+         inputSource = AUDIO_SOURCE_VOICE_RECOGNITION;
+
+From a5ec3545f879e882ed5397707f65a4757f7232d5 Mon Sep 17 00:00:00 2001
+From: Steve Kondik <steve@cyngn.com>
+Date: Mon, 18 Jul 2016 16:50:06 -0700
+Subject: [PATCH 17/60] audiopolicy: Constrain session events to music streams
+
+ * We're really only interested in music streams right now, but
+   events are being generated for all streams (system sounds, etc).
+ * Constrain for now, in the future we will filter based on client
+   registrations.
+
+Change-Id: Ic445052028c454eed146addebcdb28c4b26c4f20
+---
+ services/audiopolicy/service/AudioPolicyEffects.cpp | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/services/audiopolicy/service/AudioPolicyEffects.cpp b/services/audiopolicy/service/AudioPolicyEffects.cpp
+index 31b1637..d6fabfe 100644
+--- a/services/audiopolicy/service/AudioPolicyEffects.cpp
++++ b/services/audiopolicy/service/AudioPolicyEffects.cpp
+@@ -331,6 +331,11 @@ status_t AudioPolicyEffects::updateOutputAudioSessionInfo(audio_io_handle_t /* o
+
+     Mutex::Autolock _l(mLock);
+
++    // TODO: Handle other stream types based on client registration
++    if (stream != AUDIO_STREAM_MUSIC) {
++        return NO_ERROR;
++    }
++
+     // update AudioSessionInfo. This is used in the stream open/close path
+     // to notify userspace applications about session creation and
+     // teardown, allowing the app to make decisions about effects for
+
+From 030001de8b26291b139a8c1d594f05130dafac1b Mon Sep 17 00:00:00 2001
+From: Pawin Vongmasa <pawin@google.com>
+Date: Tue, 21 Jun 2016 19:10:21 -0700
+Subject: [PATCH 18/60] Impose a size bound for dynamically allocated tables in
+ stbl.
+
+Impose a restriction of 200MiB for tables in stsc, stts, ctts and stss
+boxes. Also change mTimeToSample from Vector to array.
+
+Bug: 29367429
+Change-Id: I953bea9fe0590268cf27376740f582dc88563d42
+
+Merge conflict resolution of ag/1170200 to mnc-mr2-release
+---
+ media/libstagefright/SampleTable.cpp       | 150 ++++++++++++++++++++++++-----
+ media/libstagefright/include/SampleTable.h |   9 +-
+ 2 files changed, 133 insertions(+), 26 deletions(-)
+
+diff --git a/media/libstagefright/SampleTable.cpp b/media/libstagefright/SampleTable.cpp
+index 8df9cb8..bc01a2d 100644
+--- a/media/libstagefright/SampleTable.cpp
++++ b/media/libstagefright/SampleTable.cpp
+@@ -123,7 +123,7 @@ SampleTable::SampleTable(const sp<DataSource> &source)
+       mNumSampleSizes(0),
+       mHasTimeToSample(false),
+       mTimeToSampleCount(0),
+-      mTimeToSample(),
++      mTimeToSample(NULL),
+       mSampleTimeEntries(NULL),
+       mCompositionTimeDeltaEntries(NULL),
+       mNumCompositionTimeDeltaEntries(0),
+@@ -132,7 +132,8 @@ SampleTable::SampleTable(const sp<DataSource> &source)
+       mNumSyncSamples(0),
+       mSyncSamples(NULL),
+       mLastSyncSampleIndex(0),
+-      mSampleToChunkEntries(NULL) {
++      mSampleToChunkEntries(NULL),
++      mTotalSize(0) {
+     mSampleIterator = new SampleIterator(this);
+ }
+
+@@ -143,6 +144,9 @@ SampleTable::~SampleTable() {
+     delete[] mSyncSamples;
+     mSyncSamples = NULL;
+
++    delete[] mTimeToSample;
++    mTimeToSample = NULL;
++
+     delete mCompositionDeltaLookup;
+     mCompositionDeltaLookup = NULL;
+
+@@ -233,13 +237,43 @@ status_t SampleTable::setSampleToChunkParams(
+         return ERROR_MALFORMED;
+     }
+
+-    if (SIZE_MAX / sizeof(SampleToChunkEntry) <= (size_t)mNumSampleToChunkOffsets)
++    if ((uint64_t)SIZE_MAX / sizeof(SampleToChunkEntry) <=
++            (uint64_t)mNumSampleToChunkOffsets) {
++        ALOGE("Sample-to-chunk table size too large.");
+         return ERROR_OUT_OF_RANGE;
++    }
++
++    mTotalSize += (uint64_t)mNumSampleToChunkOffsets *
++            sizeof(SampleToChunkEntry);
++    if (mTotalSize > kMaxTotalSize) {
++        ALOGE("Sample-to-chunk table size would make sample table too large.\n"
++              "    Requested sample-to-chunk table size = %llu\n"
++              "    Eventual sample table size >= %llu\n"
++              "    Allowed sample table size = %llu\n",
++              (unsigned long long)mNumSampleToChunkOffsets *
++                      sizeof(SampleToChunkEntry),
++              (unsigned long long)mTotalSize,
++              (unsigned long long)kMaxTotalSize);
++        return ERROR_OUT_OF_RANGE;
++    }
+
+     mSampleToChunkEntries =
+         new (std::nothrow) SampleToChunkEntry[mNumSampleToChunkOffsets];
+-    if (!mSampleToChunkEntries)
++    if (!mSampleToChunkEntries) {
++        ALOGE("Cannot allocate sample-to-chunk table with %llu entries.",
++                (unsigned long long)mNumSampleToChunkOffsets);
+         return ERROR_OUT_OF_RANGE;
++    }
++
++    if (mNumSampleToChunkOffsets == 0) {
++        return OK;
++    }
++
++    if ((off64_t)(SIZE_MAX - 8 -
++            ((mNumSampleToChunkOffsets - 1) * sizeof(SampleToChunkEntry)))
++            < mSampleToChunkOffset) {
++        return ERROR_MALFORMED;
++    }
+
+     for (uint32_t i = 0; i < mNumSampleToChunkOffsets; ++i) {
+         uint8_t buffer[12];
+@@ -248,8 +282,11 @@ status_t SampleTable::setSampleToChunkParams(
+                 != (ssize_t)sizeof(buffer)) {
+             return ERROR_IO;
+         }
+-
+-        CHECK(U32_AT(buffer) >= 1);  // chunk index is 1 based in the spec.
++        // chunk index is 1 based in the spec.
++        if (U32_AT(buffer) < 1) {
++            ALOGE("b/23534160");
++            return ERROR_OUT_OF_RANGE;
++        }
+
+         // We want the chunk index to be 0-based.
+         mSampleToChunkEntries[i].startChunk = U32_AT(buffer) - 1;
+@@ -349,21 +386,41 @@ status_t SampleTable::setTimeToSampleParams(
+         // 2) mTimeToSampleCount is the number of entries of the time-to-sample
+         //    table.
+         // 3) We hope that the table size does not exceed UINT32_MAX.
+-        ALOGE("  Error: Time-to-sample table size too large.");
+-
++        ALOGE("Time-to-sample table size too large.");
+         return ERROR_OUT_OF_RANGE;
+     }
+
+     // Note: At this point, we know that mTimeToSampleCount * 2 will not
+     // overflow because of the above condition.
+-    if (!mDataSource->getVector(data_offset + 8, &mTimeToSample,
+-                                mTimeToSampleCount * 2)) {
+-        ALOGE("  Error: Incomplete data read for time-to-sample table.");
++
++    uint64_t allocSize = (uint64_t)mTimeToSampleCount * 2 * sizeof(uint32_t);
++    mTotalSize += allocSize;
++    if (mTotalSize > kMaxTotalSize) {
++        ALOGE("Time-to-sample table size would make sample table too large.\n"
++              "    Requested time-to-sample table size = %llu\n"
++              "    Eventual sample table size >= %llu\n"
++              "    Allowed sample table size = %llu\n",
++              (unsigned long long)allocSize,
++              (unsigned long long)mTotalSize,
++              (unsigned long long)kMaxTotalSize);
++        return ERROR_OUT_OF_RANGE;
++    }
++
++    mTimeToSample = new (std::nothrow) uint32_t[mTimeToSampleCount * 2];
++    if (!mTimeToSample) {
++        ALOGE("Cannot allocate time-to-sample table with %llu entries.",
++                (unsigned long long)mTimeToSampleCount);
++        return ERROR_OUT_OF_RANGE;
++    }
++
++    if (mDataSource->readAt(data_offset + 8, mTimeToSample,
++            (size_t)allocSize) < (ssize_t)allocSize) {
++        ALOGE("Incomplete data read for time-to-sample table.");
+         return ERROR_IO;
+     }
+
+-    for (size_t i = 0; i < mTimeToSample.size(); ++i) {
+-        mTimeToSample.editItemAt(i) = ntohl(mTimeToSample[i]);
++    for (size_t i = 0; i < mTimeToSampleCount * 2; ++i) {
++        mTimeToSample[i] = ntohl(mTimeToSample[i]);
+     }
+
+     mHasTimeToSample = true;
+@@ -398,17 +455,32 @@ status_t SampleTable::setCompositionTimeToSampleParams(
+
+     mNumCompositionTimeDeltaEntries = numEntries;
+     uint64_t allocSize = (uint64_t)numEntries * 2 * sizeof(uint32_t);
+-    if (allocSize > UINT32_MAX) {
++    if (allocSize > SIZE_MAX) {
++        ALOGE("Composition-time-to-sample table size too large.");
++        return ERROR_OUT_OF_RANGE;
++    }
++
++    mTotalSize += allocSize;
++    if (mTotalSize > kMaxTotalSize) {
++        ALOGE("Composition-time-to-sample table would make sample table too large.\n"
++              "    Requested composition-time-to-sample table size = %llu\n"
++              "    Eventual sample table size >= %llu\n"
++              "    Allowed sample table size = %llu\n",
++              (unsigned long long)allocSize,
++              (unsigned long long)mTotalSize,
++              (unsigned long long)kMaxTotalSize);
+         return ERROR_OUT_OF_RANGE;
+     }
+
+     mCompositionTimeDeltaEntries = new (std::nothrow) uint32_t[2 * numEntries];
+-    if (!mCompositionTimeDeltaEntries)
++    if (!mCompositionTimeDeltaEntries) {
++        ALOGE("Cannot allocate composition-time-to-sample table with %llu "
++                "entries.", (unsigned long long)numEntries);
+         return ERROR_OUT_OF_RANGE;
++    }
+
+-    if (mDataSource->readAt(
+-                data_offset + 8, mCompositionTimeDeltaEntries, numEntries * 8)
+-            < (ssize_t)numEntries * 8) {
++    if (mDataSource->readAt(data_offset + 8, mCompositionTimeDeltaEntries,
++            (size_t)allocSize) < (ssize_t)allocSize) {
+         delete[] mCompositionTimeDeltaEntries;
+         mCompositionTimeDeltaEntries = NULL;
+
+@@ -449,18 +521,33 @@ status_t SampleTable::setSyncSampleParams(off64_t data_offset, size_t data_size)
+         ALOGV("Table of sync samples is empty or has only a single entry!");
+     }
+
+-    uint64_t allocSize = mNumSyncSamples * (uint64_t)sizeof(uint32_t);
++    uint64_t allocSize = (uint64_t)mNumSyncSamples * sizeof(uint32_t);
+     if (allocSize > SIZE_MAX) {
++        ALOGE("Sync sample table size too large.");
++        return ERROR_OUT_OF_RANGE;
++    }
++
++    mTotalSize += allocSize;
++    if (mTotalSize > kMaxTotalSize) {
++        ALOGE("Sync sample table size would make sample table too large.\n"
++              "    Requested sync sample table size = %llu\n"
++              "    Eventual sample table size >= %llu\n"
++              "    Allowed sample table size = %llu\n",
++              (unsigned long long)allocSize,
++              (unsigned long long)mTotalSize,
++              (unsigned long long)kMaxTotalSize);
+         return ERROR_OUT_OF_RANGE;
+     }
+
+     mSyncSamples = new (std::nothrow) uint32_t[mNumSyncSamples];
+-    if (!mSyncSamples)
++    if (!mSyncSamples) {
++        ALOGE("Cannot allocate sync sample table with %llu entries.",
++                (unsigned long long)mNumSyncSamples);
+         return ERROR_OUT_OF_RANGE;
++    }
+
+-    size_t size = mNumSyncSamples * sizeof(uint32_t);
+-    if (mDataSource->readAt(mSyncSampleOffset + 8, mSyncSamples, size)
+-            != (ssize_t)size) {
++    if (mDataSource->readAt(mSyncSampleOffset + 8, mSyncSamples,
++            (size_t)allocSize) != (ssize_t)allocSize) {
+         return ERROR_IO;
+     }
+
+@@ -525,9 +612,24 @@ void SampleTable::buildSampleEntriesTable() {
+         return;
+     }
+
++    mTotalSize += (uint64_t)mNumSampleSizes * sizeof(SampleTimeEntry);
++    if (mTotalSize > kMaxTotalSize) {
++        ALOGE("Sample entry table size would make sample table too large.\n"
++              "    Requested sample entry table size = %llu\n"
++              "    Eventual sample table size >= %llu\n"
++              "    Allowed sample table size = %llu\n",
++              (unsigned long long)mNumSampleSizes * sizeof(SampleTimeEntry),
++              (unsigned long long)mTotalSize,
++              (unsigned long long)kMaxTotalSize);
++        return;
++    }
++
+     mSampleTimeEntries = new (std::nothrow) SampleTimeEntry[mNumSampleSizes];
+-    if (!mSampleTimeEntries)
++    if (!mSampleTimeEntries) {
++        ALOGE("Cannot allocate sample entry table with %llu entries.",
++                (unsigned long long)mNumSampleSizes);
+         return;
++    }
+
+     uint32_t sampleIndex = 0;
+     uint32_t sampleTime = 0;
+diff --git a/media/libstagefright/include/SampleTable.h b/media/libstagefright/include/SampleTable.h
+index 465f37c..552eef7 100644
+--- a/media/libstagefright/include/SampleTable.h
++++ b/media/libstagefright/include/SampleTable.h
+@@ -24,7 +24,6 @@
+ #include <media/stagefright/MediaErrors.h>
+ #include <utils/RefBase.h>
+ #include <utils/threads.h>
+-#include <utils/Vector.h>
+
+ namespace android {
+
+@@ -96,6 +95,9 @@ class SampleTable : public RefBase {
+     static const uint32_t kSampleSizeType32;
+     static const uint32_t kSampleSizeTypeCompact;
+
++    // Limit the total size of all internal tables to 200MiB.
++    static const size_t kMaxTotalSize = 200 * (1 << 20);
++
+     sp<DataSource> mDataSource;
+     Mutex mLock;
+
+@@ -113,7 +115,7 @@ class SampleTable : public RefBase {
+
+     bool mHasTimeToSample;
+     uint32_t mTimeToSampleCount;
+-    Vector<uint32_t> mTimeToSample;
++    uint32_t* mTimeToSample;
+
+     struct SampleTimeEntry {
+         uint32_t mSampleIndex;
+@@ -139,6 +141,9 @@ class SampleTable : public RefBase {
+     };
+     SampleToChunkEntry *mSampleToChunkEntries;
+
++    // Approximate size of all tables combined.
++    uint64_t mTotalSize;
++
+     friend struct SampleIterator;
+
+     // normally we don't round
+
+From 9871fae25b351268e359682e6c149acbf47620c1 Mon Sep 17 00:00:00 2001
+From: Robert Shih <robertshih@google.com>
+Date: Mon, 27 Jun 2016 13:55:14 -0700
+Subject: [PATCH 19/60] SoftMP3: memset safely
+
+Bug: 29422022
+Change-Id: I70c9e33269d16bf8c163815706ac24e18e34fe97
+---
+ media/libstagefright/codecs/mp3dec/SoftMP3.cpp | 22 ++++++++++++++++++----
+ media/libstagefright/codecs/mp3dec/SoftMP3.h   |  1 +
+ 2 files changed, 19 insertions(+), 4 deletions(-)
+
+diff --git a/media/libstagefright/codecs/mp3dec/SoftMP3.cpp b/media/libstagefright/codecs/mp3dec/SoftMP3.cpp
+index aa946e6..daef471 100644
+--- a/media/libstagefright/codecs/mp3dec/SoftMP3.cpp
++++ b/media/libstagefright/codecs/mp3dec/SoftMP3.cpp
+@@ -120,6 +120,17 @@ void SoftMP3::initDecoder() {
+     mIsFirst = true;
+ }
+
++void *SoftMP3::memsetSafe(OMX_BUFFERHEADERTYPE *outHeader, int c, size_t len) {
++    if (len > outHeader->nAllocLen) {
++        ALOGE("memset buffer too small: got %lu, expected %zu", outHeader->nAllocLen, len);
++        android_errorWriteLog(0x534e4554, "29422022");
++        notify(OMX_EventError, OMX_ErrorUndefined, OUTPUT_BUFFER_TOO_SMALL, NULL);
++        mSignalledError = true;
++        return NULL;
++    }
++    return memset(outHeader->pBuffer, c, len);
++}
++
+ OMX_ERRORTYPE SoftMP3::internalGetParameter(
+         OMX_INDEXTYPE index, OMX_PTR params) {
+     switch (index) {
+@@ -300,7 +311,10 @@ void SoftMP3::onQueueFilled(OMX_U32 /* portIndex */) {
+                     outHeader->nOffset = 0;
+                     outHeader->nFilledLen = kPVMP3DecoderDelay * mNumChannels * sizeof(int16_t);
+
+-                    memset(outHeader->pBuffer, 0, outHeader->nFilledLen);
++                    if (!memsetSafe(outHeader, 0, outHeader->nFilledLen)) {
++                        return;
++                    }
++
+                 }
+                 outHeader->nFlags = OMX_BUFFERFLAG_EOS;
+                 mSignalledOutputEos = true;
+@@ -312,9 +326,9 @@ void SoftMP3::onQueueFilled(OMX_U32 /* portIndex */) {
+                 // if mIsFirst is true as we may not have a valid
+                 // mConfig->samplingRate and mConfig->num_channels?
+                 ALOGV_IF(mIsFirst, "insufficient data for first frame, sending silence");
+-                memset(outHeader->pBuffer,
+-                       0,
+-                       mConfig->outputFrameSize * sizeof(int16_t));
++                if (!memsetSafe(outHeader, 0, mConfig->outputFrameSize * sizeof(int16_t))) {
++                    return;
++                }
+
+                 if (inHeader) {
+                     mConfig->inputBufferUsedLength = inHeader->nFilledLen;
+diff --git a/media/libstagefright/codecs/mp3dec/SoftMP3.h b/media/libstagefright/codecs/mp3dec/SoftMP3.h
+index f9e7b53..3bfa6c7 100644
+--- a/media/libstagefright/codecs/mp3dec/SoftMP3.h
++++ b/media/libstagefright/codecs/mp3dec/SoftMP3.h
+@@ -72,6 +72,7 @@ struct SoftMP3 : public SimpleSoftOMXComponent {
+
+     void initPorts();
+     void initDecoder();
++    void *memsetSafe(OMX_BUFFERHEADERTYPE *outHeader, int c, size_t len);
+
+     DISALLOW_EVIL_CONSTRUCTORS(SoftMP3);
+ };
+
+From 49a847e0f6558849adef32d64d2a1093fc527c96 Mon Sep 17 00:00:00 2001
+From: Wonsik Kim <wonsik@google.com>
+Date: Fri, 17 Jun 2016 01:24:30 +0900
+Subject: [PATCH 20/60] DO NOT MERGE stagefright: fix possible stack overflow
+ in AVCC reassemble
+
+Additionally, remove use of variable length array which is
+non-standard in C++.
+
+Bug: 29161888
+Change-Id: Ifdc3e7435f2225214c053b13f3bfe71c7d0ff506
+---
+ media/libstagefright/Utils.cpp | 28 +++++++++++++++++++---------
+ 1 file changed, 19 insertions(+), 9 deletions(-)
+
+diff --git a/media/libstagefright/Utils.cpp b/media/libstagefright/Utils.cpp
+index 17f0201..0d9dc3a 100644
+--- a/media/libstagefright/Utils.cpp
++++ b/media/libstagefright/Utils.cpp
+@@ -671,20 +671,30 @@ void convertMessageToMetaData(const sp<AMessage> &msg, sp<MetaData> &meta) {
+     // reassemble the csd data into its original form
+     sp<ABuffer> csd0;
+     if (msg->findBuffer("csd-0", &csd0)) {
++        int csd0size = csd0->size();
+         if (mime == MEDIA_MIMETYPE_VIDEO_AVC) {
+             sp<ABuffer> csd1;
+             if (msg->findBuffer("csd-1", &csd1)) {
+-                char avcc[1024]; // that oughta be enough, right?
+-                size_t outsize = reassembleAVCC(csd0, csd1, avcc);
+-                meta->setData(kKeyAVCC, kKeyAVCC, avcc, outsize);
++                Vector<char> avcc;
++                int avccSize = csd0size + csd1->size() + 1024;
++                if (avcc.resize(avccSize) < 0) {
++                    ALOGE("error allocating avcc (size %d); abort setting avcc.", avccSize);
++                } else {
++                    size_t outsize = reassembleAVCC(csd0, csd1, avcc.editArray());
++                    meta->setData(kKeyAVCC, kKeyAVCC, avcc.array(), outsize);
++                }
+             }
+         } else if (mime == MEDIA_MIMETYPE_AUDIO_AAC || mime == MEDIA_MIMETYPE_VIDEO_MPEG4) {
+-            int csd0size = csd0->size();
+-            char esds[csd0size + 31];
+-            // The written ESDS is actually for an audio stream, but it's enough
+-            // for transporting the CSD to muxers.
+-            reassembleESDS(csd0, esds);
+-            meta->setData(kKeyESDS, kKeyESDS, esds, sizeof(esds));
++            Vector<char> esds;
++            int esdsSize = csd0size + 31;
++            if (esds.resize(esdsSize) < 0) {
++                ALOGE("error allocating esds (size %d); abort setting esds.", esdsSize);
++            } else {
++                // The written ESDS is actually for an audio stream, but it's enough
++                // for transporting the CSD to muxers.
++                reassembleESDS(csd0, esds.editArray());
++                meta->setData(kKeyESDS, kKeyESDS, esds.array(), esds.size());
++            }
+         }
+     }
+
+
+From f9391b39b1f0c98191ad3fff1a54b5f26e954421 Mon Sep 17 00:00:00 2001
+From: Ray Essick <essick@google.com>
+Date: Wed, 6 Jul 2016 10:13:25 -0700
+Subject: [PATCH 21/60] Fix corruption via buffer overflow in mediaserver
+
+change unbound sprintf() to snprintf() so network-provided values
+can't overflow the buffers.
+
+Applicable to all K/L/M/N branches.
+
+Bug: 25747670
+Change-Id: Id6a5120c2d08a6fbbd47deffb680ecf82015f4f6
+---
+ media/libstagefright/rtsp/ASessionDescription.cpp | 14 +++++++++-----
+ 1 file changed, 9 insertions(+), 5 deletions(-)
+
+diff --git a/media/libstagefright/rtsp/ASessionDescription.cpp b/media/libstagefright/rtsp/ASessionDescription.cpp
+index 98498e9..47573c3 100644
+--- a/media/libstagefright/rtsp/ASessionDescription.cpp
++++ b/media/libstagefright/rtsp/ASessionDescription.cpp
+@@ -17,6 +17,7 @@
+ //#define LOG_NDEBUG 0
+ #define LOG_TAG "ASessionDescription"
+ #include <utils/Log.h>
++#include <cutils/log.h>
+
+ #include "ASessionDescription.h"
+
+@@ -211,12 +212,12 @@ void ASessionDescription::getFormatType(
+
+     *PT = x;
+
+-    char key[20];
+-    sprintf(key, "a=rtpmap:%lu", x);
++    char key[32];
++    snprintf(key, sizeof(key), "a=rtpmap:%lu", x);
+
+     CHECK(findAttribute(index, key, desc));
+
+-    sprintf(key, "a=fmtp:%lu", x);
++    snprintf(key, sizeof(key), "a=fmtp:%lu", x);
+     if (!findAttribute(index, key, params)) {
+         params->clear();
+     }
+@@ -228,8 +229,11 @@ bool ASessionDescription::getDimensions(
+     *width = 0;
+     *height = 0;
+
+-    char key[20];
+-    sprintf(key, "a=framesize:%lu", PT);
++    char key[33];
++    snprintf(key, sizeof(key), "a=framesize:%lu", PT);
++    if (PT > 9999999) {
++        android_errorWriteLog(0x534e4554, "25747670");
++    }
+     AString value;
+     if (!findAttribute(index, key, &value)) {
+         return false;
+
+From 97837bb6cbac21ea679843a0037779d3834bed64 Mon Sep 17 00:00:00 2001
+From: Robert Shih <robertshih@google.com>
+Date: Tue, 12 Jul 2016 18:00:53 -0700
+Subject: [PATCH 22/60] OMXCodec: check IMemory::pointer() before using
+ allocation
+
+Bug: 29421811
+Change-Id: I0a73ba12bae4122f1d89fc92e5ea4f6a96cd1ed1
+---
+ media/libstagefright/OMXCodec.cpp | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/media/libstagefright/OMXCodec.cpp b/media/libstagefright/OMXCodec.cpp
+index 4618e21..7e15e18 100644
+--- a/media/libstagefright/OMXCodec.cpp
++++ b/media/libstagefright/OMXCodec.cpp
+@@ -1622,7 +1622,9 @@ status_t OMXCodec::allocateBuffersOnPort(OMX_U32 portIndex) {
+
+     for (OMX_U32 i = 0; i < def.nBufferCountActual; ++i) {
+         sp<IMemory> mem = mDealer[portIndex]->allocate(def.nBufferSize);
+-        CHECK(mem.get() != NULL);
++        if (mem == NULL || mem->pointer() == NULL) {
++            return NO_MEMORY;
++        }
+
+         BufferInfo info;
+         info.mData = NULL;
+
+From ee44d7cdbdea9a8a67e967b3bc05f0cd409ae2b1 Mon Sep 17 00:00:00 2001
+From: Robert Shih <robertshih@google.com>
+Date: Fri, 24 Jun 2016 12:37:45 -0700
+Subject: [PATCH 23/60] SoftVPX: fix nFilledLen overflow
+
+Bug: 29421675
+Change-Id: I25d4cf54a5df22c2130c37e95c7c7f75063111f3
+---
+ media/libstagefright/codecs/on2/dec/SoftVPX.cpp | 22 +++++++++++++++++++---
+ media/libstagefright/codecs/on2/dec/SoftVPX.h   |  1 +
+ 2 files changed, 20 insertions(+), 3 deletions(-)
+
+diff --git a/media/libstagefright/codecs/on2/dec/SoftVPX.cpp b/media/libstagefright/codecs/on2/dec/SoftVPX.cpp
+index 02e85a1..58a2660 100644
+--- a/media/libstagefright/codecs/on2/dec/SoftVPX.cpp
++++ b/media/libstagefright/codecs/on2/dec/SoftVPX.cpp
+@@ -149,7 +149,7 @@ bool SoftVPX::outputBuffers(bool flushDecoder, bool display, bool eos, bool *por
+         outHeader->nFlags = 0;
+         outHeader->nFilledLen = (outputBufferWidth() * outputBufferHeight() * 3) / 2;
+         outHeader->nTimeStamp = *(OMX_TICKS *)mImg->user_priv;
+-        if (outHeader->nAllocLen >= outHeader->nFilledLen) {
++        if (outputBufferSafe(outHeader)) {
+             uint8_t *dst = outHeader->pBuffer;
+             const uint8_t *srcY = (const uint8_t *)mImg->planes[VPX_PLANE_Y];
+             const uint8_t *srcU = (const uint8_t *)mImg->planes[VPX_PLANE_U];
+@@ -159,8 +159,6 @@ bool SoftVPX::outputBuffers(bool flushDecoder, bool display, bool eos, bool *por
+             size_t srcVStride = mImg->stride[VPX_PLANE_V];
+             copyYV12FrameToOutputBuffer(dst, srcY, srcU, srcV, srcYStride, srcUStride, srcVStride);
+         } else {
+-            ALOGE("b/27597103, buffer too small");
+-            android_errorWriteLog(0x534e4554, "27597103");
+             outHeader->nFilledLen = 0;
+         }
+
+@@ -190,6 +188,24 @@ bool SoftVPX::outputBuffers(bool flushDecoder, bool display, bool eos, bool *por
+     return true;
+ }
+
++bool SoftVPX::outputBufferSafe(OMX_BUFFERHEADERTYPE *outHeader) {
++    uint32_t width = outputBufferWidth();
++    uint32_t height = outputBufferHeight();
++    uint64_t nFilledLen = width;
++    nFilledLen *= height;
++    if (nFilledLen > UINT32_MAX / 3) {
++        ALOGE("b/29421675, nFilledLen overflow %llu w %u h %u", nFilledLen, width, height);
++        android_errorWriteLog(0x534e4554, "29421675");
++        return false;
++    } else if (outHeader->nAllocLen < outHeader->nFilledLen) {
++        ALOGE("b/27597103, buffer too small");
++        android_errorWriteLog(0x534e4554, "27597103");
++        return false;
++    }
++
++    return true;
++}
++
+ void SoftVPX::onQueueFilled(OMX_U32 /* portIndex */) {
+     if (mOutputPortSettingsChange != NONE || mEOSStatus == OUTPUT_FRAMES_FLUSHED) {
+         return;
+diff --git a/media/libstagefright/codecs/on2/dec/SoftVPX.h b/media/libstagefright/codecs/on2/dec/SoftVPX.h
+index 8ccbae2..84cf79c 100644
+--- a/media/libstagefright/codecs/on2/dec/SoftVPX.h
++++ b/media/libstagefright/codecs/on2/dec/SoftVPX.h
+@@ -66,6 +66,7 @@ struct SoftVPX : public SoftVideoDecoderOMXComponent {
+     status_t initDecoder();
+     status_t destroyDecoder();
+     bool outputBuffers(bool flushDecoder, bool display, bool eos, bool *portWillReset);
++    bool outputBufferSafe(OMX_BUFFERHEADERTYPE *outHeader);
+
+     DISALLOW_EVIL_CONSTRUCTORS(SoftVPX);
+ };
+
+From 50643aadeb8dfe53da7848a5d5e995d5486678e1 Mon Sep 17 00:00:00 2001
+From: Lajos Molnar <lajos@google.com>
+Date: Wed, 13 Jul 2016 20:27:32 -0700
+Subject: [PATCH 24/60] fix build
+
+Change-Id: I9bb8c659d3fc97a8e748451d82d0f3448faa242b
+---
+ media/libstagefright/codecs/on2/dec/SoftVPX.cpp | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/media/libstagefright/codecs/on2/dec/SoftVPX.cpp b/media/libstagefright/codecs/on2/dec/SoftVPX.cpp
+index 58a2660..912fac2 100644
+--- a/media/libstagefright/codecs/on2/dec/SoftVPX.cpp
++++ b/media/libstagefright/codecs/on2/dec/SoftVPX.cpp
+@@ -194,7 +194,8 @@ bool SoftVPX::outputBufferSafe(OMX_BUFFERHEADERTYPE *outHeader) {
+     uint64_t nFilledLen = width;
+     nFilledLen *= height;
+     if (nFilledLen > UINT32_MAX / 3) {
+-        ALOGE("b/29421675, nFilledLen overflow %llu w %u h %u", nFilledLen, width, height);
++        ALOGE("b/29421675, nFilledLen overflow %llu w %u h %u",
++                (unsigned long long)nFilledLen, width, height);
+         android_errorWriteLog(0x534e4554, "29421675");
+         return false;
+     } else if (outHeader->nAllocLen < outHeader->nFilledLen) {
+
+From 36dd3c28898248fe5ecb7e256025499bb8d6275a Mon Sep 17 00:00:00 2001
+From: Sergio Giro <sgiro@google.com>
+Date: Tue, 28 Jun 2016 18:24:52 +0100
+Subject: [PATCH 25/60] Add bound checks to utf16_to_utf8
+
+Bug: 29250543
+Change-Id: I3518416e89ed901021970958fb6005fd69129f7c
+(cherry picked from commit 1d3f4278b2666d1a145af2f54782c993aa07d1d9)
+---
+ media/libmediaplayerservice/MediaPlayerService.cpp | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/media/libmediaplayerservice/MediaPlayerService.cpp b/media/libmediaplayerservice/MediaPlayerService.cpp
+index bcfd83a..b8c610d 100644
+--- a/media/libmediaplayerservice/MediaPlayerService.cpp
++++ b/media/libmediaplayerservice/MediaPlayerService.cpp
+@@ -237,7 +237,8 @@ void unmarshallAudioAttributes(const Parcel& parcel, audio_attributes_t *attribu
+             // copying array size -1, array for tags was calloc'd, no need to NULL-terminate it
+             size_t tagSize = realTagSize > AUDIO_ATTRIBUTES_TAGS_MAX_SIZE - 1 ?
+                     AUDIO_ATTRIBUTES_TAGS_MAX_SIZE - 1 : realTagSize;
+-            utf16_to_utf8(tags.string(), tagSize, attributes->tags);
++            utf16_to_utf8(tags.string(), tagSize, attributes->tags,
++                    sizeof(attributes->tags) / sizeof(attributes->tags[0]));
+         }
+     } else {
+         ALOGE("unmarshallAudioAttributes() received unflattened tags, ignoring tag values");
+
+From ae1810fab90cd6ec19d4f0386b80aa0391882fba Mon Sep 17 00:00:00 2001
+From: Robert Shih <robertshih@google.com>
+Date: Thu, 14 Jul 2016 12:37:52 -0700
+Subject: [PATCH 26/60] Fix build
+
+Change-Id: I96a9c437eec53a285ac96794cc1ad0c8954b27e0
+---
+ media/libstagefright/codecs/mp3dec/SoftMP3.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/media/libstagefright/codecs/mp3dec/SoftMP3.cpp b/media/libstagefright/codecs/mp3dec/SoftMP3.cpp
+index daef471..54fe622 100644
+--- a/media/libstagefright/codecs/mp3dec/SoftMP3.cpp
++++ b/media/libstagefright/codecs/mp3dec/SoftMP3.cpp
+@@ -122,7 +122,7 @@ void SoftMP3::initDecoder() {
+
+ void *SoftMP3::memsetSafe(OMX_BUFFERHEADERTYPE *outHeader, int c, size_t len) {
+     if (len > outHeader->nAllocLen) {
+-        ALOGE("memset buffer too small: got %lu, expected %zu", outHeader->nAllocLen, len);
++        ALOGE("memset buffer too small: got %lu, expected %zu", (unsigned long)outHeader->nAllocLen, len);
+         android_errorWriteLog(0x534e4554, "29422022");
+         notify(OMX_EventError, OMX_ErrorUndefined, OUTPUT_BUFFER_TOO_SMALL, NULL);
+         mSignalledError = true;
+
+From d67bab69a322990aa386dad608ad2a823ef21578 Mon Sep 17 00:00:00 2001
+From: Robert Shih <robertshih@google.com>
+Date: Thu, 14 Jul 2016 13:50:32 -0700
+Subject: [PATCH 27/60] Fix build
+
+Change-Id: I48ba34b3df9c9a896d4b18c3f48e41744b7dab54
+---
+ media/libstagefright/codecs/mp3dec/SoftMP3.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/media/libstagefright/codecs/mp3dec/SoftMP3.cpp b/media/libstagefright/codecs/mp3dec/SoftMP3.cpp
+index 54fe622..9f7dd59 100644
+--- a/media/libstagefright/codecs/mp3dec/SoftMP3.cpp
++++ b/media/libstagefright/codecs/mp3dec/SoftMP3.cpp
+@@ -122,7 +122,7 @@ void SoftMP3::initDecoder() {
+
+ void *SoftMP3::memsetSafe(OMX_BUFFERHEADERTYPE *outHeader, int c, size_t len) {
+     if (len > outHeader->nAllocLen) {
+-        ALOGE("memset buffer too small: got %lu, expected %zu", (unsigned long)outHeader->nAllocLen, len);
++        ALOGE("memset buffer too small: got %u, expected %zu", outHeader->nAllocLen, len);
+         android_errorWriteLog(0x534e4554, "29422022");
+         notify(OMX_EventError, OMX_ErrorUndefined, OUTPUT_BUFFER_TOO_SMALL, NULL);
+         mSignalledError = true;
+
+From c174665ec2f19904550daeb65d08f4959654d9a4 Mon Sep 17 00:00:00 2001
+From: Wonsik Kim <wonsik@google.com>
+Date: Thu, 7 Jul 2016 12:57:02 +0900
+Subject: [PATCH 28/60] omx: prevent input port enable/disable for software
+ codecs
+
+Bug: 29421804
+Change-Id: Iba1011e9af942a6dff7f659af769a51e3f5ba66f
+---
+ media/libstagefright/omx/SimpleSoftOMXComponent.cpp | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/media/libstagefright/omx/SimpleSoftOMXComponent.cpp b/media/libstagefright/omx/SimpleSoftOMXComponent.cpp
+index 60c1e2e..13afd45 100644
+--- a/media/libstagefright/omx/SimpleSoftOMXComponent.cpp
++++ b/media/libstagefright/omx/SimpleSoftOMXComponent.cpp
+@@ -469,6 +469,13 @@ void SimpleSoftOMXComponent::onPortEnable(OMX_U32 portIndex, bool enable) {
+     CHECK_EQ((int)port->mTransition, (int)PortInfo::NONE);
+     CHECK(port->mDef.bEnabled == !enable);
+
++    if (port->mDef.eDir != OMX_DirOutput) {
++        ALOGE("Port enable/disable allowed only on output ports.");
++        notify(OMX_EventError, OMX_ErrorUndefined, 0, NULL);
++        android_errorWriteLog(0x534e4554, "29421804");
++        return;
++    }
++
+     if (!enable) {
+         port->mDef.bEnabled = OMX_FALSE;
+         port->mTransition = PortInfo::DISABLING;
+
+From 6679b5088f36693f5708dcaedd0c9ab7c66df27c Mon Sep 17 00:00:00 2001
+From: Wonsik Kim <wonsik@google.com>
+Date: Thu, 21 Jul 2016 14:43:38 +0900
+Subject: [PATCH 29/60] DO NOT MERGE - stagefright: fix integer overflow error
+
+Bug: 30103394
+Change-Id: If449d3e30a0bf2ebea5317f41813bfed094f7408
+(cherry picked from commit 2c74a3cd5d1d66b9a35424b9c4443dafa6db5bef)
+---
+ media/libstagefright/SampleTable.cpp | 29 +++++++++++++++--------------
+ 1 file changed, 15 insertions(+), 14 deletions(-)
+
+diff --git a/media/libstagefright/SampleTable.cpp b/media/libstagefright/SampleTable.cpp
+index bc01a2d..72e30f1 100644
+--- a/media/libstagefright/SampleTable.cpp
++++ b/media/libstagefright/SampleTable.cpp
+@@ -18,6 +18,8 @@
+ //#define LOG_NDEBUG 0
+ #include <utils/Log.h>
+
++#include <limits>
++
+ #include "include/SampleTable.h"
+ #include "include/SampleIterator.h"
+
+@@ -27,11 +29,6 @@
+ #include <media/stagefright/DataSource.h>
+ #include <media/stagefright/Utils.h>
+
+-/* TODO: remove after being merged into other branches */
+-#ifndef UINT32_MAX
+-#define UINT32_MAX       (4294967295U)
+-#endif
+-
+ namespace android {
+
+ // static
+@@ -45,6 +42,8 @@ const uint32_t SampleTable::kSampleSizeTypeCompact = FOURCC('s', 't', 'z', '2');
+
+ ////////////////////////////////////////////////////////////////////////////////
+
++const off64_t kMaxOffset = std::numeric_limits<off64_t>::max();
++
+ struct SampleTable::CompositionDeltaLookup {
+     CompositionDeltaLookup();
+
+@@ -233,11 +232,11 @@ status_t SampleTable::setSampleToChunkParams(
+
+     mNumSampleToChunkOffsets = U32_AT(&header[4]);
+
+-    if (data_size < 8 + mNumSampleToChunkOffsets * 12) {
++    if ((data_size - 8) / sizeof(SampleToChunkEntry) < mNumSampleToChunkOffsets) {
+         return ERROR_MALFORMED;
+     }
+
+-    if ((uint64_t)SIZE_MAX / sizeof(SampleToChunkEntry) <=
++    if ((uint64_t)kMaxTotalSize / sizeof(SampleToChunkEntry) <=
+             (uint64_t)mNumSampleToChunkOffsets) {
+         ALOGE("Sample-to-chunk table size too large.");
+         return ERROR_OUT_OF_RANGE;
+@@ -269,16 +268,19 @@ status_t SampleTable::setSampleToChunkParams(
+         return OK;
+     }
+
+-    if ((off64_t)(SIZE_MAX - 8 -
++    if ((off64_t)(kMaxOffset - 8 -
+             ((mNumSampleToChunkOffsets - 1) * sizeof(SampleToChunkEntry)))
+             < mSampleToChunkOffset) {
+         return ERROR_MALFORMED;
+     }
+
+     for (uint32_t i = 0; i < mNumSampleToChunkOffsets; ++i) {
+-        uint8_t buffer[12];
++        uint8_t buffer[sizeof(SampleToChunkEntry)];
++
+         if (mDataSource->readAt(
+-                    mSampleToChunkOffset + 8 + i * 12, buffer, sizeof(buffer))
++                    mSampleToChunkOffset + 8 + i * sizeof(SampleToChunkEntry),
++                    buffer,
++                    sizeof(buffer))
+                 != (ssize_t)sizeof(buffer)) {
+             return ERROR_IO;
+         }
+@@ -378,8 +380,7 @@ status_t SampleTable::setTimeToSampleParams(
+     }
+
+     mTimeToSampleCount = U32_AT(&header[4]);
+-    if ((uint64_t)mTimeToSampleCount >
+-        (uint64_t)UINT32_MAX / (2 * sizeof(uint32_t))) {
++    if (mTimeToSampleCount > UINT32_MAX / (2 * sizeof(uint32_t))) {
+         // Choose this bound because
+         // 1) 2 * sizeof(uint32_t) is the amount of memory needed for one
+         //    time-to-sample entry in the time-to-sample table.
+@@ -455,7 +456,7 @@ status_t SampleTable::setCompositionTimeToSampleParams(
+
+     mNumCompositionTimeDeltaEntries = numEntries;
+     uint64_t allocSize = (uint64_t)numEntries * 2 * sizeof(uint32_t);
+-    if (allocSize > SIZE_MAX) {
++    if (allocSize > kMaxTotalSize) {
+         ALOGE("Composition-time-to-sample table size too large.");
+         return ERROR_OUT_OF_RANGE;
+     }
+@@ -522,7 +523,7 @@ status_t SampleTable::setSyncSampleParams(off64_t data_offset, size_t data_size)
+     }
+
+     uint64_t allocSize = (uint64_t)mNumSyncSamples * sizeof(uint32_t);
+-    if (allocSize > SIZE_MAX) {
++    if (allocSize > kMaxTotalSize) {
+         ALOGE("Sync sample table size too large.");
+         return ERROR_OUT_OF_RANGE;
+     }
+
+From 2071f20583103d1ccf6102f84b2eedd6bb1214ba Mon Sep 17 00:00:00 2001
+From: Ricardo Cerqueira <ricardo@cyngn.com>
+Date: Wed, 10 Aug 2016 13:55:18 +0100
+Subject: [PATCH 30/60] stagefright: Remove the HAL3 limitation from the video
+ reference clock selection
+
+Usage of boot-time as the timestamp reference isn't necessarily limited to
+HAL3. A single property check for media.camera.ts.monotonic is enough to
+cover all cases.
+
+Change-Id: Ic56dbcc6ba32c25bccde6dd0bbf07d4c918af43e
+---
+ media/libstagefright/CameraSource.cpp     | 3 +--
+ media/libstagefright/MediaCodecSource.cpp | 3 +--
+ 2 files changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/media/libstagefright/CameraSource.cpp b/media/libstagefright/CameraSource.cpp
+index 4caee78..f6b4741 100644
+--- a/media/libstagefright/CameraSource.cpp
++++ b/media/libstagefright/CameraSource.cpp
+@@ -705,8 +705,7 @@ status_t CameraSource::start(MetaData *meta) {
+         int64_t startTimeUs;
+
+         auto key = kKeyTime;
+-        if (property_get_bool("persist.camera.HAL3.enabled", true) &&
+-             !property_get_bool("media.camera.ts.monotonic", true)) {
++        if (!property_get_bool("media.camera.ts.monotonic", true)) {
+             key = kKeyTimeBoot;
+         }
+
+diff --git a/media/libstagefright/MediaCodecSource.cpp b/media/libstagefright/MediaCodecSource.cpp
+index 94427ef..14a3c0d 100644
+--- a/media/libstagefright/MediaCodecSource.cpp
++++ b/media/libstagefright/MediaCodecSource.cpp
+@@ -665,8 +665,7 @@ status_t MediaCodecSource::onStart(MetaData *params) {
+
+     if (mFlags & FLAG_USE_SURFACE_INPUT) {
+         auto key = kKeyTime;
+-        if (property_get_bool("persist.camera.HAL3.enabled", true) &&
+-             !property_get_bool("media.camera.ts.monotonic", true)) {
++        if (!property_get_bool("media.camera.ts.monotonic", true)) {
+             key = kKeyTimeBoot;
+         }
+
+
+From 8d41a10e57903142b9daba6a31a47f101757130c Mon Sep 17 00:00:00 2001
+From: Danny Baumann <dannybaumann@web.de>
+Date: Tue, 9 Aug 2016 09:51:51 +0200
+Subject: [PATCH 31/60] mediascanner: Accept .opus file extension.
+
+Apparently there are a number of people and/or tools that name their
+opus coded audio in ogg containers *.opus. Reflect that fact.
+
+Change-Id: I0617a6d93fe793cdef06ffd4e334001e5f9b054e
+---
+ media/libstagefright/StagefrightMediaScanner.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/media/libstagefright/StagefrightMediaScanner.cpp b/media/libstagefright/StagefrightMediaScanner.cpp
+index 8d3392e..d5ef1a6 100644
+--- a/media/libstagefright/StagefrightMediaScanner.cpp
++++ b/media/libstagefright/StagefrightMediaScanner.cpp
+@@ -46,7 +46,7 @@ static bool FileHasAcceptableExtension(const char *extension) {
+         ".mov", ".ra", ".rm", ".rmvb", ".ac3", ".ape", ".dts",
+         ".mp1", ".mp2", ".f4v", "hlv", "nrg", "m2v", ".swf",
+         ".avi", ".mpg", ".mpeg", ".awb", ".vc1", ".vob", ".divx",
+-        ".mpga", ".mov", ".qcp", ".ec3"
++        ".mpga", ".mov", ".qcp", ".ec3", ".opus"
+     };
+     static const size_t kNumValidExtensions =
+         sizeof(kValidExtensions) / sizeof(kValidExtensions[0]);
+
+From 10db5e094e4d7501ec277622dc29e714927dc588 Mon Sep 17 00:00:00 2001
+From: Robert Shih <robertshih@google.com>
+Date: Mon, 27 Jun 2016 13:55:14 -0700
+Subject: [PATCH 32/60] SoftMP3: memset safely
+
+Bug: 29422022
+Change-Id: I70c9e33269d16bf8c163815706ac24e18e34fe97
+---
+ media/libstagefright/codecs/mp3dec/SoftMP3.cpp | 22 ++++++++++++++++++----
+ media/libstagefright/codecs/mp3dec/SoftMP3.h   |  1 +
+ 2 files changed, 19 insertions(+), 4 deletions(-)
+
+diff --git a/media/libstagefright/codecs/mp3dec/SoftMP3.cpp b/media/libstagefright/codecs/mp3dec/SoftMP3.cpp
+index aa946e6..daef471 100644
+--- a/media/libstagefright/codecs/mp3dec/SoftMP3.cpp
++++ b/media/libstagefright/codecs/mp3dec/SoftMP3.cpp
+@@ -120,6 +120,17 @@ void SoftMP3::initDecoder() {
+     mIsFirst = true;
+ }
+
++void *SoftMP3::memsetSafe(OMX_BUFFERHEADERTYPE *outHeader, int c, size_t len) {
++    if (len > outHeader->nAllocLen) {
++        ALOGE("memset buffer too small: got %lu, expected %zu", outHeader->nAllocLen, len);
++        android_errorWriteLog(0x534e4554, "29422022");
++        notify(OMX_EventError, OMX_ErrorUndefined, OUTPUT_BUFFER_TOO_SMALL, NULL);
++        mSignalledError = true;
++        return NULL;
++    }
++    return memset(outHeader->pBuffer, c, len);
++}
++
+ OMX_ERRORTYPE SoftMP3::internalGetParameter(
+         OMX_INDEXTYPE index, OMX_PTR params) {
+     switch (index) {
+@@ -300,7 +311,10 @@ void SoftMP3::onQueueFilled(OMX_U32 /* portIndex */) {
+                     outHeader->nOffset = 0;
+                     outHeader->nFilledLen = kPVMP3DecoderDelay * mNumChannels * sizeof(int16_t);
+
+-                    memset(outHeader->pBuffer, 0, outHeader->nFilledLen);
++                    if (!memsetSafe(outHeader, 0, outHeader->nFilledLen)) {
++                        return;
++                    }
++
+                 }
+                 outHeader->nFlags = OMX_BUFFERFLAG_EOS;
+                 mSignalledOutputEos = true;
+@@ -312,9 +326,9 @@ void SoftMP3::onQueueFilled(OMX_U32 /* portIndex */) {
+                 // if mIsFirst is true as we may not have a valid
+                 // mConfig->samplingRate and mConfig->num_channels?
+                 ALOGV_IF(mIsFirst, "insufficient data for first frame, sending silence");
+-                memset(outHeader->pBuffer,
+-                       0,
+-                       mConfig->outputFrameSize * sizeof(int16_t));
++                if (!memsetSafe(outHeader, 0, mConfig->outputFrameSize * sizeof(int16_t))) {
++                    return;
++                }
+
+                 if (inHeader) {
+                     mConfig->inputBufferUsedLength = inHeader->nFilledLen;
+diff --git a/media/libstagefright/codecs/mp3dec/SoftMP3.h b/media/libstagefright/codecs/mp3dec/SoftMP3.h
+index f9e7b53..3bfa6c7 100644
+--- a/media/libstagefright/codecs/mp3dec/SoftMP3.h
++++ b/media/libstagefright/codecs/mp3dec/SoftMP3.h
+@@ -72,6 +72,7 @@ struct SoftMP3 : public SimpleSoftOMXComponent {
+
+     void initPorts();
+     void initDecoder();
++    void *memsetSafe(OMX_BUFFERHEADERTYPE *outHeader, int c, size_t len);
+
+     DISALLOW_EVIL_CONSTRUCTORS(SoftMP3);
+ };
+
+From e441275efea14a98d5a059328e660d9a08b13932 Mon Sep 17 00:00:00 2001
+From: Wonsik Kim <wonsik@google.com>
+Date: Fri, 17 Jun 2016 01:24:30 +0900
+Subject: [PATCH 33/60] DO NOT MERGE stagefright: fix possible stack overflow
+ in AVCC reassemble
+
+Additionally, remove use of variable length array which is
+non-standard in C++.
+
+Bug: 29161888
+Change-Id: Ifdc3e7435f2225214c053b13f3bfe71c7d0ff506
+---
+ media/libstagefright/Utils.cpp | 28 +++++++++++++++++++---------
+ 1 file changed, 19 insertions(+), 9 deletions(-)
+
+diff --git a/media/libstagefright/Utils.cpp b/media/libstagefright/Utils.cpp
+index 17f0201..0d9dc3a 100644
+--- a/media/libstagefright/Utils.cpp
++++ b/media/libstagefright/Utils.cpp
+@@ -671,20 +671,30 @@ void convertMessageToMetaData(const sp<AMessage> &msg, sp<MetaData> &meta) {
+     // reassemble the csd data into its original form
+     sp<ABuffer> csd0;
+     if (msg->findBuffer("csd-0", &csd0)) {
++        int csd0size = csd0->size();
+         if (mime == MEDIA_MIMETYPE_VIDEO_AVC) {
+             sp<ABuffer> csd1;
+             if (msg->findBuffer("csd-1", &csd1)) {
+-                char avcc[1024]; // that oughta be enough, right?
+-                size_t outsize = reassembleAVCC(csd0, csd1, avcc);
+-                meta->setData(kKeyAVCC, kKeyAVCC, avcc, outsize);
++                Vector<char> avcc;
++                int avccSize = csd0size + csd1->size() + 1024;
++                if (avcc.resize(avccSize) < 0) {
++                    ALOGE("error allocating avcc (size %d); abort setting avcc.", avccSize);
++                } else {
++                    size_t outsize = reassembleAVCC(csd0, csd1, avcc.editArray());
++                    meta->setData(kKeyAVCC, kKeyAVCC, avcc.array(), outsize);
++                }
+             }
+         } else if (mime == MEDIA_MIMETYPE_AUDIO_AAC || mime == MEDIA_MIMETYPE_VIDEO_MPEG4) {
+-            int csd0size = csd0->size();
+-            char esds[csd0size + 31];
+-            // The written ESDS is actually for an audio stream, but it's enough
+-            // for transporting the CSD to muxers.
+-            reassembleESDS(csd0, esds);
+-            meta->setData(kKeyESDS, kKeyESDS, esds, sizeof(esds));
++            Vector<char> esds;
++            int esdsSize = csd0size + 31;
++            if (esds.resize(esdsSize) < 0) {
++                ALOGE("error allocating esds (size %d); abort setting esds.", esdsSize);
++            } else {
++                // The written ESDS is actually for an audio stream, but it's enough
++                // for transporting the CSD to muxers.
++                reassembleESDS(csd0, esds.editArray());
++                meta->setData(kKeyESDS, kKeyESDS, esds.array(), esds.size());
++            }
+         }
+     }
+
+
+From e9ef8505a1a33667ef97b752f77190c24b468015 Mon Sep 17 00:00:00 2001
+From: Ray Essick <essick@google.com>
+Date: Wed, 6 Jul 2016 10:13:25 -0700
+Subject: [PATCH 34/60] Fix corruption via buffer overflow in mediaserver
+
+change unbound sprintf() to snprintf() so network-provided values
+can't overflow the buffers.
+
+Applicable to all K/L/M/N branches.
+
+Bug: 25747670
+Change-Id: Id6a5120c2d08a6fbbd47deffb680ecf82015f4f6
+---
+ media/libstagefright/rtsp/ASessionDescription.cpp | 14 +++++++++-----
+ 1 file changed, 9 insertions(+), 5 deletions(-)
+
+diff --git a/media/libstagefright/rtsp/ASessionDescription.cpp b/media/libstagefright/rtsp/ASessionDescription.cpp
+index 98498e9..47573c3 100644
+--- a/media/libstagefright/rtsp/ASessionDescription.cpp
++++ b/media/libstagefright/rtsp/ASessionDescription.cpp
+@@ -17,6 +17,7 @@
+ //#define LOG_NDEBUG 0
+ #define LOG_TAG "ASessionDescription"
+ #include <utils/Log.h>
++#include <cutils/log.h>
+
+ #include "ASessionDescription.h"
+
+@@ -211,12 +212,12 @@ void ASessionDescription::getFormatType(
+
+     *PT = x;
+
+-    char key[20];
+-    sprintf(key, "a=rtpmap:%lu", x);
++    char key[32];
++    snprintf(key, sizeof(key), "a=rtpmap:%lu", x);
+
+     CHECK(findAttribute(index, key, desc));
+
+-    sprintf(key, "a=fmtp:%lu", x);
++    snprintf(key, sizeof(key), "a=fmtp:%lu", x);
+     if (!findAttribute(index, key, params)) {
+         params->clear();
+     }
+@@ -228,8 +229,11 @@ bool ASessionDescription::getDimensions(
+     *width = 0;
+     *height = 0;
+
+-    char key[20];
+-    sprintf(key, "a=framesize:%lu", PT);
++    char key[33];
++    snprintf(key, sizeof(key), "a=framesize:%lu", PT);
++    if (PT > 9999999) {
++        android_errorWriteLog(0x534e4554, "25747670");
++    }
+     AString value;
+     if (!findAttribute(index, key, &value)) {
+         return false;
+
+From ed4f365e8b158934937ad0a2e14ede566923bc33 Mon Sep 17 00:00:00 2001
+From: Robert Shih <robertshih@google.com>
+Date: Tue, 12 Jul 2016 18:00:53 -0700
+Subject: [PATCH 35/60] OMXCodec: check IMemory::pointer() before using
+ allocation
+
+Bug: 29421811
+Change-Id: I0a73ba12bae4122f1d89fc92e5ea4f6a96cd1ed1
+---
+ media/libstagefright/OMXCodec.cpp | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/media/libstagefright/OMXCodec.cpp b/media/libstagefright/OMXCodec.cpp
+index 4618e21..7e15e18 100644
+--- a/media/libstagefright/OMXCodec.cpp
++++ b/media/libstagefright/OMXCodec.cpp
+@@ -1622,7 +1622,9 @@ status_t OMXCodec::allocateBuffersOnPort(OMX_U32 portIndex) {
+
+     for (OMX_U32 i = 0; i < def.nBufferCountActual; ++i) {
+         sp<IMemory> mem = mDealer[portIndex]->allocate(def.nBufferSize);
+-        CHECK(mem.get() != NULL);
++        if (mem == NULL || mem->pointer() == NULL) {
++            return NO_MEMORY;
++        }
+
+         BufferInfo info;
+         info.mData = NULL;
+
+From 356f1ded898c5708ea95fe22ece052c3a094950d Mon Sep 17 00:00:00 2001
+From: Robert Shih <robertshih@google.com>
+Date: Fri, 24 Jun 2016 12:37:45 -0700
+Subject: [PATCH 36/60] SoftVPX: fix nFilledLen overflow
+
+Bug: 29421675
+Change-Id: I25d4cf54a5df22c2130c37e95c7c7f75063111f3
+---
+ media/libstagefright/codecs/on2/dec/SoftVPX.cpp | 22 +++++++++++++++++++---
+ media/libstagefright/codecs/on2/dec/SoftVPX.h   |  1 +
+ 2 files changed, 20 insertions(+), 3 deletions(-)
+
+diff --git a/media/libstagefright/codecs/on2/dec/SoftVPX.cpp b/media/libstagefright/codecs/on2/dec/SoftVPX.cpp
+index 02e85a1..58a2660 100644
+--- a/media/libstagefright/codecs/on2/dec/SoftVPX.cpp
++++ b/media/libstagefright/codecs/on2/dec/SoftVPX.cpp
+@@ -149,7 +149,7 @@ bool SoftVPX::outputBuffers(bool flushDecoder, bool display, bool eos, bool *por
+         outHeader->nFlags = 0;
+         outHeader->nFilledLen = (outputBufferWidth() * outputBufferHeight() * 3) / 2;
+         outHeader->nTimeStamp = *(OMX_TICKS *)mImg->user_priv;
+-        if (outHeader->nAllocLen >= outHeader->nFilledLen) {
++        if (outputBufferSafe(outHeader)) {
+             uint8_t *dst = outHeader->pBuffer;
+             const uint8_t *srcY = (const uint8_t *)mImg->planes[VPX_PLANE_Y];
+             const uint8_t *srcU = (const uint8_t *)mImg->planes[VPX_PLANE_U];
+@@ -159,8 +159,6 @@ bool SoftVPX::outputBuffers(bool flushDecoder, bool display, bool eos, bool *por
+             size_t srcVStride = mImg->stride[VPX_PLANE_V];
+             copyYV12FrameToOutputBuffer(dst, srcY, srcU, srcV, srcYStride, srcUStride, srcVStride);
+         } else {
+-            ALOGE("b/27597103, buffer too small");
+-            android_errorWriteLog(0x534e4554, "27597103");
+             outHeader->nFilledLen = 0;
+         }
+
+@@ -190,6 +188,24 @@ bool SoftVPX::outputBuffers(bool flushDecoder, bool display, bool eos, bool *por
+     return true;
+ }
+
++bool SoftVPX::outputBufferSafe(OMX_BUFFERHEADERTYPE *outHeader) {
++    uint32_t width = outputBufferWidth();
++    uint32_t height = outputBufferHeight();
++    uint64_t nFilledLen = width;
++    nFilledLen *= height;
++    if (nFilledLen > UINT32_MAX / 3) {
++        ALOGE("b/29421675, nFilledLen overflow %llu w %u h %u", nFilledLen, width, height);
++        android_errorWriteLog(0x534e4554, "29421675");
++        return false;
++    } else if (outHeader->nAllocLen < outHeader->nFilledLen) {
++        ALOGE("b/27597103, buffer too small");
++        android_errorWriteLog(0x534e4554, "27597103");
++        return false;
++    }
++
++    return true;
++}
++
+ void SoftVPX::onQueueFilled(OMX_U32 /* portIndex */) {
+     if (mOutputPortSettingsChange != NONE || mEOSStatus == OUTPUT_FRAMES_FLUSHED) {
+         return;
+diff --git a/media/libstagefright/codecs/on2/dec/SoftVPX.h b/media/libstagefright/codecs/on2/dec/SoftVPX.h
+index 8ccbae2..84cf79c 100644
+--- a/media/libstagefright/codecs/on2/dec/SoftVPX.h
++++ b/media/libstagefright/codecs/on2/dec/SoftVPX.h
+@@ -66,6 +66,7 @@ struct SoftVPX : public SoftVideoDecoderOMXComponent {
+     status_t initDecoder();
+     status_t destroyDecoder();
+     bool outputBuffers(bool flushDecoder, bool display, bool eos, bool *portWillReset);
++    bool outputBufferSafe(OMX_BUFFERHEADERTYPE *outHeader);
+
+     DISALLOW_EVIL_CONSTRUCTORS(SoftVPX);
+ };
+
+From 2a1a0fd88e84fc845cd6bce3a161672d80c1df39 Mon Sep 17 00:00:00 2001
+From: Lajos Molnar <lajos@google.com>
+Date: Wed, 13 Jul 2016 20:27:32 -0700
+Subject: [PATCH 37/60] fix build
+
+Change-Id: I9bb8c659d3fc97a8e748451d82d0f3448faa242b
+---
+ media/libstagefright/codecs/on2/dec/SoftVPX.cpp | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/media/libstagefright/codecs/on2/dec/SoftVPX.cpp b/media/libstagefright/codecs/on2/dec/SoftVPX.cpp
+index 58a2660..912fac2 100644
+--- a/media/libstagefright/codecs/on2/dec/SoftVPX.cpp
++++ b/media/libstagefright/codecs/on2/dec/SoftVPX.cpp
+@@ -194,7 +194,8 @@ bool SoftVPX::outputBufferSafe(OMX_BUFFERHEADERTYPE *outHeader) {
+     uint64_t nFilledLen = width;
+     nFilledLen *= height;
+     if (nFilledLen > UINT32_MAX / 3) {
+-        ALOGE("b/29421675, nFilledLen overflow %llu w %u h %u", nFilledLen, width, height);
++        ALOGE("b/29421675, nFilledLen overflow %llu w %u h %u",
++                (unsigned long long)nFilledLen, width, height);
+         android_errorWriteLog(0x534e4554, "29421675");
+         return false;
+     } else if (outHeader->nAllocLen < outHeader->nFilledLen) {
+
+From 3d4cb8bbc03aab52c71bb339624170f2b7238cdf Mon Sep 17 00:00:00 2001
+From: Sergio Giro <sgiro@google.com>
+Date: Tue, 28 Jun 2016 18:24:52 +0100
+Subject: [PATCH 38/60] Add bound checks to utf16_to_utf8
+
+Bug: 29250543
+Change-Id: I3518416e89ed901021970958fb6005fd69129f7c
+(cherry picked from commit 1d3f4278b2666d1a145af2f54782c993aa07d1d9)
+---
+ media/libmediaplayerservice/MediaPlayerService.cpp | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/media/libmediaplayerservice/MediaPlayerService.cpp b/media/libmediaplayerservice/MediaPlayerService.cpp
+index bcfd83a..b8c610d 100644
+--- a/media/libmediaplayerservice/MediaPlayerService.cpp
++++ b/media/libmediaplayerservice/MediaPlayerService.cpp
+@@ -237,7 +237,8 @@ void unmarshallAudioAttributes(const Parcel& parcel, audio_attributes_t *attribu
+             // copying array size -1, array for tags was calloc'd, no need to NULL-terminate it
+             size_t tagSize = realTagSize > AUDIO_ATTRIBUTES_TAGS_MAX_SIZE - 1 ?
+                     AUDIO_ATTRIBUTES_TAGS_MAX_SIZE - 1 : realTagSize;
+-            utf16_to_utf8(tags.string(), tagSize, attributes->tags);
++            utf16_to_utf8(tags.string(), tagSize, attributes->tags,
++                    sizeof(attributes->tags) / sizeof(attributes->tags[0]));
+         }
+     } else {
+         ALOGE("unmarshallAudioAttributes() received unflattened tags, ignoring tag values");
+
+From 361db9e07657a6de075b5f23b5cfcecfd5a73fd3 Mon Sep 17 00:00:00 2001
+From: Robert Shih <robertshih@google.com>
+Date: Thu, 14 Jul 2016 12:37:52 -0700
+Subject: [PATCH 39/60] Fix build
+
+Change-Id: I96a9c437eec53a285ac96794cc1ad0c8954b27e0
+---
+ media/libstagefright/codecs/mp3dec/SoftMP3.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/media/libstagefright/codecs/mp3dec/SoftMP3.cpp b/media/libstagefright/codecs/mp3dec/SoftMP3.cpp
+index daef471..54fe622 100644
+--- a/media/libstagefright/codecs/mp3dec/SoftMP3.cpp
++++ b/media/libstagefright/codecs/mp3dec/SoftMP3.cpp
+@@ -122,7 +122,7 @@ void SoftMP3::initDecoder() {
+
+ void *SoftMP3::memsetSafe(OMX_BUFFERHEADERTYPE *outHeader, int c, size_t len) {
+     if (len > outHeader->nAllocLen) {
+-        ALOGE("memset buffer too small: got %lu, expected %zu", outHeader->nAllocLen, len);
++        ALOGE("memset buffer too small: got %lu, expected %zu", (unsigned long)outHeader->nAllocLen, len);
+         android_errorWriteLog(0x534e4554, "29422022");
+         notify(OMX_EventError, OMX_ErrorUndefined, OUTPUT_BUFFER_TOO_SMALL, NULL);
+         mSignalledError = true;
+
+From 05713f1d239566bff957177f1a7aaba380fbc978 Mon Sep 17 00:00:00 2001
+From: Robert Shih <robertshih@google.com>
+Date: Thu, 14 Jul 2016 13:50:32 -0700
+Subject: [PATCH 40/60] Fix build
+
+Change-Id: I48ba34b3df9c9a896d4b18c3f48e41744b7dab54
+---
+ media/libstagefright/codecs/mp3dec/SoftMP3.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/media/libstagefright/codecs/mp3dec/SoftMP3.cpp b/media/libstagefright/codecs/mp3dec/SoftMP3.cpp
+index 54fe622..9f7dd59 100644
+--- a/media/libstagefright/codecs/mp3dec/SoftMP3.cpp
++++ b/media/libstagefright/codecs/mp3dec/SoftMP3.cpp
+@@ -122,7 +122,7 @@ void SoftMP3::initDecoder() {
+
+ void *SoftMP3::memsetSafe(OMX_BUFFERHEADERTYPE *outHeader, int c, size_t len) {
+     if (len > outHeader->nAllocLen) {
+-        ALOGE("memset buffer too small: got %lu, expected %zu", (unsigned long)outHeader->nAllocLen, len);
++        ALOGE("memset buffer too small: got %u, expected %zu", outHeader->nAllocLen, len);
+         android_errorWriteLog(0x534e4554, "29422022");
+         notify(OMX_EventError, OMX_ErrorUndefined, OUTPUT_BUFFER_TOO_SMALL, NULL);
+         mSignalledError = true;
+
+From 9d32255b7302922bac4141bf557277d87bc81388 Mon Sep 17 00:00:00 2001
+From: Wonsik Kim <wonsik@google.com>
+Date: Thu, 7 Jul 2016 12:57:02 +0900
+Subject: [PATCH 41/60] omx: prevent input port enable/disable for software
+ codecs
+
+Bug: 29421804
+Change-Id: Iba1011e9af942a6dff7f659af769a51e3f5ba66f
+---
+ media/libstagefright/omx/SimpleSoftOMXComponent.cpp | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/media/libstagefright/omx/SimpleSoftOMXComponent.cpp b/media/libstagefright/omx/SimpleSoftOMXComponent.cpp
+index 60c1e2e..13afd45 100644
+--- a/media/libstagefright/omx/SimpleSoftOMXComponent.cpp
++++ b/media/libstagefright/omx/SimpleSoftOMXComponent.cpp
+@@ -469,6 +469,13 @@ void SimpleSoftOMXComponent::onPortEnable(OMX_U32 portIndex, bool enable) {
+     CHECK_EQ((int)port->mTransition, (int)PortInfo::NONE);
+     CHECK(port->mDef.bEnabled == !enable);
+
++    if (port->mDef.eDir != OMX_DirOutput) {
++        ALOGE("Port enable/disable allowed only on output ports.");
++        notify(OMX_EventError, OMX_ErrorUndefined, 0, NULL);
++        android_errorWriteLog(0x534e4554, "29421804");
++        return;
++    }
++
+     if (!enable) {
+         port->mDef.bEnabled = OMX_FALSE;
+         port->mTransition = PortInfo::DISABLING;
+
+From 2bef075f91e203e96130c88320b7d13eddc17d89 Mon Sep 17 00:00:00 2001
+From: Pawin Vongmasa <pawin@google.com>
+Date: Tue, 21 Jun 2016 19:10:21 -0700
+Subject: [PATCH 42/60] Impose a size bound for dynamically allocated tables in
+ stbl.
+
+Impose a restriction of 200MiB for tables in stsc, stts, ctts and stss
+boxes. Also change mTimeToSample from Vector to array.
+
+Bug: 29367429
+Change-Id: I953bea9fe0590268cf27376740f582dc88563d42
+
+Merge conflict resolution of ag/1170200 to mnc-mr2-release
+---
+ media/libstagefright/SampleTable.cpp       | 150 ++++++++++++++++++++++++-----
+ media/libstagefright/include/SampleTable.h |   9 +-
+ 2 files changed, 133 insertions(+), 26 deletions(-)
+
+diff --git a/media/libstagefright/SampleTable.cpp b/media/libstagefright/SampleTable.cpp
+index 8df9cb8..bc01a2d 100644
+--- a/media/libstagefright/SampleTable.cpp
++++ b/media/libstagefright/SampleTable.cpp
+@@ -123,7 +123,7 @@ SampleTable::SampleTable(const sp<DataSource> &source)
+       mNumSampleSizes(0),
+       mHasTimeToSample(false),
+       mTimeToSampleCount(0),
+-      mTimeToSample(),
++      mTimeToSample(NULL),
+       mSampleTimeEntries(NULL),
+       mCompositionTimeDeltaEntries(NULL),
+       mNumCompositionTimeDeltaEntries(0),
+@@ -132,7 +132,8 @@ SampleTable::SampleTable(const sp<DataSource> &source)
+       mNumSyncSamples(0),
+       mSyncSamples(NULL),
+       mLastSyncSampleIndex(0),
+-      mSampleToChunkEntries(NULL) {
++      mSampleToChunkEntries(NULL),
++      mTotalSize(0) {
+     mSampleIterator = new SampleIterator(this);
+ }
+
+@@ -143,6 +144,9 @@ SampleTable::~SampleTable() {
+     delete[] mSyncSamples;
+     mSyncSamples = NULL;
+
++    delete[] mTimeToSample;
++    mTimeToSample = NULL;
++
+     delete mCompositionDeltaLookup;
+     mCompositionDeltaLookup = NULL;
+
+@@ -233,13 +237,43 @@ status_t SampleTable::setSampleToChunkParams(
+         return ERROR_MALFORMED;
+     }
+
+-    if (SIZE_MAX / sizeof(SampleToChunkEntry) <= (size_t)mNumSampleToChunkOffsets)
++    if ((uint64_t)SIZE_MAX / sizeof(SampleToChunkEntry) <=
++            (uint64_t)mNumSampleToChunkOffsets) {
++        ALOGE("Sample-to-chunk table size too large.");
+         return ERROR_OUT_OF_RANGE;
++    }
++
++    mTotalSize += (uint64_t)mNumSampleToChunkOffsets *
++            sizeof(SampleToChunkEntry);
++    if (mTotalSize > kMaxTotalSize) {
++        ALOGE("Sample-to-chunk table size would make sample table too large.\n"
++              "    Requested sample-to-chunk table size = %llu\n"
++              "    Eventual sample table size >= %llu\n"
++              "    Allowed sample table size = %llu\n",
++              (unsigned long long)mNumSampleToChunkOffsets *
++                      sizeof(SampleToChunkEntry),
++              (unsigned long long)mTotalSize,
++              (unsigned long long)kMaxTotalSize);
++        return ERROR_OUT_OF_RANGE;
++    }
+
+     mSampleToChunkEntries =
+         new (std::nothrow) SampleToChunkEntry[mNumSampleToChunkOffsets];
+-    if (!mSampleToChunkEntries)
++    if (!mSampleToChunkEntries) {
++        ALOGE("Cannot allocate sample-to-chunk table with %llu entries.",
++                (unsigned long long)mNumSampleToChunkOffsets);
+         return ERROR_OUT_OF_RANGE;
++    }
++
++    if (mNumSampleToChunkOffsets == 0) {
++        return OK;
++    }
++
++    if ((off64_t)(SIZE_MAX - 8 -
++            ((mNumSampleToChunkOffsets - 1) * sizeof(SampleToChunkEntry)))
++            < mSampleToChunkOffset) {
++        return ERROR_MALFORMED;
++    }
+
+     for (uint32_t i = 0; i < mNumSampleToChunkOffsets; ++i) {
+         uint8_t buffer[12];
+@@ -248,8 +282,11 @@ status_t SampleTable::setSampleToChunkParams(
+                 != (ssize_t)sizeof(buffer)) {
+             return ERROR_IO;
+         }
+-
+-        CHECK(U32_AT(buffer) >= 1);  // chunk index is 1 based in the spec.
++        // chunk index is 1 based in the spec.
++        if (U32_AT(buffer) < 1) {
++            ALOGE("b/23534160");
++            return ERROR_OUT_OF_RANGE;
++        }
+
+         // We want the chunk index to be 0-based.
+         mSampleToChunkEntries[i].startChunk = U32_AT(buffer) - 1;
+@@ -349,21 +386,41 @@ status_t SampleTable::setTimeToSampleParams(
+         // 2) mTimeToSampleCount is the number of entries of the time-to-sample
+         //    table.
+         // 3) We hope that the table size does not exceed UINT32_MAX.
+-        ALOGE("  Error: Time-to-sample table size too large.");
+-
++        ALOGE("Time-to-sample table size too large.");
+         return ERROR_OUT_OF_RANGE;
+     }
+
+     // Note: At this point, we know that mTimeToSampleCount * 2 will not
+     // overflow because of the above condition.
+-    if (!mDataSource->getVector(data_offset + 8, &mTimeToSample,
+-                                mTimeToSampleCount * 2)) {
+-        ALOGE("  Error: Incomplete data read for time-to-sample table.");
++
++    uint64_t allocSize = (uint64_t)mTimeToSampleCount * 2 * sizeof(uint32_t);
++    mTotalSize += allocSize;
++    if (mTotalSize > kMaxTotalSize) {
++        ALOGE("Time-to-sample table size would make sample table too large.\n"
++              "    Requested time-to-sample table size = %llu\n"
++              "    Eventual sample table size >= %llu\n"
++              "    Allowed sample table size = %llu\n",
++              (unsigned long long)allocSize,
++              (unsigned long long)mTotalSize,
++              (unsigned long long)kMaxTotalSize);
++        return ERROR_OUT_OF_RANGE;
++    }
++
++    mTimeToSample = new (std::nothrow) uint32_t[mTimeToSampleCount * 2];
++    if (!mTimeToSample) {
++        ALOGE("Cannot allocate time-to-sample table with %llu entries.",
++                (unsigned long long)mTimeToSampleCount);
++        return ERROR_OUT_OF_RANGE;
++    }
++
++    if (mDataSource->readAt(data_offset + 8, mTimeToSample,
++            (size_t)allocSize) < (ssize_t)allocSize) {
++        ALOGE("Incomplete data read for time-to-sample table.");
+         return ERROR_IO;
+     }
+
+-    for (size_t i = 0; i < mTimeToSample.size(); ++i) {
+-        mTimeToSample.editItemAt(i) = ntohl(mTimeToSample[i]);
++    for (size_t i = 0; i < mTimeToSampleCount * 2; ++i) {
++        mTimeToSample[i] = ntohl(mTimeToSample[i]);
+     }
+
+     mHasTimeToSample = true;
+@@ -398,17 +455,32 @@ status_t SampleTable::setCompositionTimeToSampleParams(
+
+     mNumCompositionTimeDeltaEntries = numEntries;
+     uint64_t allocSize = (uint64_t)numEntries * 2 * sizeof(uint32_t);
+-    if (allocSize > UINT32_MAX) {
++    if (allocSize > SIZE_MAX) {
++        ALOGE("Composition-time-to-sample table size too large.");
++        return ERROR_OUT_OF_RANGE;
++    }
++
++    mTotalSize += allocSize;
++    if (mTotalSize > kMaxTotalSize) {
++        ALOGE("Composition-time-to-sample table would make sample table too large.\n"
++              "    Requested composition-time-to-sample table size = %llu\n"
++              "    Eventual sample table size >= %llu\n"
++              "    Allowed sample table size = %llu\n",
++              (unsigned long long)allocSize,
++              (unsigned long long)mTotalSize,
++              (unsigned long long)kMaxTotalSize);
+         return ERROR_OUT_OF_RANGE;
+     }
+
+     mCompositionTimeDeltaEntries = new (std::nothrow) uint32_t[2 * numEntries];
+-    if (!mCompositionTimeDeltaEntries)
++    if (!mCompositionTimeDeltaEntries) {
++        ALOGE("Cannot allocate composition-time-to-sample table with %llu "
++                "entries.", (unsigned long long)numEntries);
+         return ERROR_OUT_OF_RANGE;
++    }
+
+-    if (mDataSource->readAt(
+-                data_offset + 8, mCompositionTimeDeltaEntries, numEntries * 8)
+-            < (ssize_t)numEntries * 8) {
++    if (mDataSource->readAt(data_offset + 8, mCompositionTimeDeltaEntries,
++            (size_t)allocSize) < (ssize_t)allocSize) {
+         delete[] mCompositionTimeDeltaEntries;
+         mCompositionTimeDeltaEntries = NULL;
+
+@@ -449,18 +521,33 @@ status_t SampleTable::setSyncSampleParams(off64_t data_offset, size_t data_size)
+         ALOGV("Table of sync samples is empty or has only a single entry!");
+     }
+
+-    uint64_t allocSize = mNumSyncSamples * (uint64_t)sizeof(uint32_t);
++    uint64_t allocSize = (uint64_t)mNumSyncSamples * sizeof(uint32_t);
+     if (allocSize > SIZE_MAX) {
++        ALOGE("Sync sample table size too large.");
++        return ERROR_OUT_OF_RANGE;
++    }
++
++    mTotalSize += allocSize;
++    if (mTotalSize > kMaxTotalSize) {
++        ALOGE("Sync sample table size would make sample table too large.\n"
++              "    Requested sync sample table size = %llu\n"
++              "    Eventual sample table size >= %llu\n"
++              "    Allowed sample table size = %llu\n",
++              (unsigned long long)allocSize,
++              (unsigned long long)mTotalSize,
++              (unsigned long long)kMaxTotalSize);
+         return ERROR_OUT_OF_RANGE;
+     }
+
+     mSyncSamples = new (std::nothrow) uint32_t[mNumSyncSamples];
+-    if (!mSyncSamples)
++    if (!mSyncSamples) {
++        ALOGE("Cannot allocate sync sample table with %llu entries.",
++                (unsigned long long)mNumSyncSamples);
+         return ERROR_OUT_OF_RANGE;
++    }
+
+-    size_t size = mNumSyncSamples * sizeof(uint32_t);
+-    if (mDataSource->readAt(mSyncSampleOffset + 8, mSyncSamples, size)
+-            != (ssize_t)size) {
++    if (mDataSource->readAt(mSyncSampleOffset + 8, mSyncSamples,
++            (size_t)allocSize) != (ssize_t)allocSize) {
+         return ERROR_IO;
+     }
+
+@@ -525,9 +612,24 @@ void SampleTable::buildSampleEntriesTable() {
+         return;
+     }
+
++    mTotalSize += (uint64_t)mNumSampleSizes * sizeof(SampleTimeEntry);
++    if (mTotalSize > kMaxTotalSize) {
++        ALOGE("Sample entry table size would make sample table too large.\n"
++              "    Requested sample entry table size = %llu\n"
++              "    Eventual sample table size >= %llu\n"
++              "    Allowed sample table size = %llu\n",
++              (unsigned long long)mNumSampleSizes * sizeof(SampleTimeEntry),
++              (unsigned long long)mTotalSize,
++              (unsigned long long)kMaxTotalSize);
++        return;
++    }
++
+     mSampleTimeEntries = new (std::nothrow) SampleTimeEntry[mNumSampleSizes];
+-    if (!mSampleTimeEntries)
++    if (!mSampleTimeEntries) {
++        ALOGE("Cannot allocate sample entry table with %llu entries.",
++                (unsigned long long)mNumSampleSizes);
+         return;
++    }
+
+     uint32_t sampleIndex = 0;
+     uint32_t sampleTime = 0;
+diff --git a/media/libstagefright/include/SampleTable.h b/media/libstagefright/include/SampleTable.h
+index 465f37c..552eef7 100644
+--- a/media/libstagefright/include/SampleTable.h
++++ b/media/libstagefright/include/SampleTable.h
+@@ -24,7 +24,6 @@
+ #include <media/stagefright/MediaErrors.h>
+ #include <utils/RefBase.h>
+ #include <utils/threads.h>
+-#include <utils/Vector.h>
+
+ namespace android {
+
+@@ -96,6 +95,9 @@ class SampleTable : public RefBase {
+     static const uint32_t kSampleSizeType32;
+     static const uint32_t kSampleSizeTypeCompact;
+
++    // Limit the total size of all internal tables to 200MiB.
++    static const size_t kMaxTotalSize = 200 * (1 << 20);
++
+     sp<DataSource> mDataSource;
+     Mutex mLock;
+
+@@ -113,7 +115,7 @@ class SampleTable : public RefBase {
+
+     bool mHasTimeToSample;
+     uint32_t mTimeToSampleCount;
+-    Vector<uint32_t> mTimeToSample;
++    uint32_t* mTimeToSample;
+
+     struct SampleTimeEntry {
+         uint32_t mSampleIndex;
+@@ -139,6 +141,9 @@ class SampleTable : public RefBase {
+     };
+     SampleToChunkEntry *mSampleToChunkEntries;
+
++    // Approximate size of all tables combined.
++    uint64_t mTotalSize;
++
+     friend struct SampleIterator;
+
+     // normally we don't round
+
+From eb11f3a9e6638805c4473c3bf448584893bae519 Mon Sep 17 00:00:00 2001
+From: Wonsik Kim <wonsik@google.com>
+Date: Thu, 21 Jul 2016 14:43:38 +0900
+Subject: [PATCH 43/60] DO NOT MERGE - stagefright: fix integer overflow error
+
+Bug: 30103394
+Change-Id: If449d3e30a0bf2ebea5317f41813bfed094f7408
+(cherry picked from commit 2c74a3cd5d1d66b9a35424b9c4443dafa6db5bef)
+---
+ media/libstagefright/SampleTable.cpp | 29 +++++++++++++++--------------
+ 1 file changed, 15 insertions(+), 14 deletions(-)
+
+diff --git a/media/libstagefright/SampleTable.cpp b/media/libstagefright/SampleTable.cpp
+index bc01a2d..72e30f1 100644
+--- a/media/libstagefright/SampleTable.cpp
++++ b/media/libstagefright/SampleTable.cpp
+@@ -18,6 +18,8 @@
+ //#define LOG_NDEBUG 0
+ #include <utils/Log.h>
+
++#include <limits>
++
+ #include "include/SampleTable.h"
+ #include "include/SampleIterator.h"
+
+@@ -27,11 +29,6 @@
+ #include <media/stagefright/DataSource.h>
+ #include <media/stagefright/Utils.h>
+
+-/* TODO: remove after being merged into other branches */
+-#ifndef UINT32_MAX
+-#define UINT32_MAX       (4294967295U)
+-#endif
+-
+ namespace android {
+
+ // static
+@@ -45,6 +42,8 @@ const uint32_t SampleTable::kSampleSizeTypeCompact = FOURCC('s', 't', 'z', '2');
+
+ ////////////////////////////////////////////////////////////////////////////////
+
++const off64_t kMaxOffset = std::numeric_limits<off64_t>::max();
++
+ struct SampleTable::CompositionDeltaLookup {
+     CompositionDeltaLookup();
+
+@@ -233,11 +232,11 @@ status_t SampleTable::setSampleToChunkParams(
+
+     mNumSampleToChunkOffsets = U32_AT(&header[4]);
+
+-    if (data_size < 8 + mNumSampleToChunkOffsets * 12) {
++    if ((data_size - 8) / sizeof(SampleToChunkEntry) < mNumSampleToChunkOffsets) {
+         return ERROR_MALFORMED;
+     }
+
+-    if ((uint64_t)SIZE_MAX / sizeof(SampleToChunkEntry) <=
++    if ((uint64_t)kMaxTotalSize / sizeof(SampleToChunkEntry) <=
+             (uint64_t)mNumSampleToChunkOffsets) {
+         ALOGE("Sample-to-chunk table size too large.");
+         return ERROR_OUT_OF_RANGE;
+@@ -269,16 +268,19 @@ status_t SampleTable::setSampleToChunkParams(
+         return OK;
+     }
+
+-    if ((off64_t)(SIZE_MAX - 8 -
++    if ((off64_t)(kMaxOffset - 8 -
+             ((mNumSampleToChunkOffsets - 1) * sizeof(SampleToChunkEntry)))
+             < mSampleToChunkOffset) {
+         return ERROR_MALFORMED;
+     }
+
+     for (uint32_t i = 0; i < mNumSampleToChunkOffsets; ++i) {
+-        uint8_t buffer[12];
++        uint8_t buffer[sizeof(SampleToChunkEntry)];
++
+         if (mDataSource->readAt(
+-                    mSampleToChunkOffset + 8 + i * 12, buffer, sizeof(buffer))
++                    mSampleToChunkOffset + 8 + i * sizeof(SampleToChunkEntry),
++                    buffer,
++                    sizeof(buffer))
+                 != (ssize_t)sizeof(buffer)) {
+             return ERROR_IO;
+         }
+@@ -378,8 +380,7 @@ status_t SampleTable::setTimeToSampleParams(
+     }
+
+     mTimeToSampleCount = U32_AT(&header[4]);
+-    if ((uint64_t)mTimeToSampleCount >
+-        (uint64_t)UINT32_MAX / (2 * sizeof(uint32_t))) {
++    if (mTimeToSampleCount > UINT32_MAX / (2 * sizeof(uint32_t))) {
+         // Choose this bound because
+         // 1) 2 * sizeof(uint32_t) is the amount of memory needed for one
+         //    time-to-sample entry in the time-to-sample table.
+@@ -455,7 +456,7 @@ status_t SampleTable::setCompositionTimeToSampleParams(
+
+     mNumCompositionTimeDeltaEntries = numEntries;
+     uint64_t allocSize = (uint64_t)numEntries * 2 * sizeof(uint32_t);
+-    if (allocSize > SIZE_MAX) {
++    if (allocSize > kMaxTotalSize) {
+         ALOGE("Composition-time-to-sample table size too large.");
+         return ERROR_OUT_OF_RANGE;
+     }
+@@ -522,7 +523,7 @@ status_t SampleTable::setSyncSampleParams(off64_t data_offset, size_t data_size)
+     }
+
+     uint64_t allocSize = (uint64_t)mNumSyncSamples * sizeof(uint32_t);
+-    if (allocSize > SIZE_MAX) {
++    if (allocSize > kMaxTotalSize) {
+         ALOGE("Sync sample table size too large.");
+         return ERROR_OUT_OF_RANGE;
+     }
+
+From e72652f039b9067f9e747d70184507d41ef1f6d7 Mon Sep 17 00:00:00 2001
+From: Glenn Kasten <gkasten@google.com>
+Date: Wed, 2 Dec 2015 11:40:09 -0800
+Subject: [PATCH 44/60] Don't place large objects on the stack
+
+Bug: 25020816
+Change-Id: Ife4da9fc3000e645f654f2eb28b37ad3a89d61f9
+---
+ services/audioflinger/Threads.cpp | 18 +++++++++++++-----
+ 1 file changed, 13 insertions(+), 5 deletions(-)
+
+diff --git a/services/audioflinger/Threads.cpp b/services/audioflinger/Threads.cpp
+index e1e4980..ecdbf43 100644
+--- a/services/audioflinger/Threads.cpp
++++ b/services/audioflinger/Threads.cpp
+@@ -4470,8 +4470,12 @@ void AudioFlinger::MixerThread::dumpInternals(int fd, const Vector<String16>& ar
+     dprintf(fd, "  AudioMixer tracks: 0x%08x\n", mAudioMixer->trackNames());
+
+     // Make a non-atomic copy of fast mixer dump state so it won't change underneath us
+-    const FastMixerDumpState copy(mFastMixerDumpState);
+-    copy.dump(fd);
++    // while we are dumping it.  It may be inconsistent, but it won't mutate!
++    // This is a large object so we place it on the heap.
++    // FIXME 25972958: Need an intelligent copy constructor that does not touch unused pages.
++    const FastMixerDumpState *copy = new FastMixerDumpState(mFastMixerDumpState);
++    copy->dump(fd);
++    delete copy;
+
+ #ifdef STATE_QUEUE_DUMP
+     // Similar for state queue
+@@ -6460,9 +6464,13 @@ void AudioFlinger::RecordThread::dumpInternals(int fd, const Vector<String16>& a
+     dprintf(fd, "  Fast capture thread: %s\n", hasFastCapture() ? "yes" : "no");
+     dprintf(fd, "  Fast track available: %s\n", mFastTrackAvail ? "yes" : "no");
+
+-    //  Make a non-atomic copy of fast capture dump state so it won't change underneath us
+-    const FastCaptureDumpState copy(mFastCaptureDumpState);
+-    copy.dump(fd);
++    // Make a non-atomic copy of fast capture dump state so it won't change underneath us
++    // while we are dumping it.  It may be inconsistent, but it won't mutate!
++    // This is a large object so we place it on the heap.
++    // FIXME 25972958: Need an intelligent copy constructor that does not touch unused pages.
++    const FastCaptureDumpState *copy = new FastCaptureDumpState(mFastCaptureDumpState);
++    copy->dump(fd);
++    delete copy;
+ }
+
+ void AudioFlinger::RecordThread::dumpTracks(int fd, const Vector<String16>& args __unused)
+
+From 6fde774471629832951e9b9b2e0d758e10f6431d Mon Sep 17 00:00:00 2001
+From: Haynes Mathew George <hgeorge@codeaurora.org>
+Date: Tue, 3 May 2016 16:34:26 -0700
+Subject: [PATCH 45/60] audioflinger: set flush pending on invalidating offload
+ track
+
+On invalidating an offload track, the IAudioTrack instance is
+destroyed and the offload output is released. If it so happens
+that APM::getOutputForAttr for the new IAudioTrack is called before
+OffloadThread::prepareTracks_l checks and removes an invalid track,
+the same output can get reused.
+
+The side effect of this is data present in HAL and below from before the
+invalidate will be rendered before data from the new seek position
+is rendered. This is unexpected.
+
+To fix this, set hint to issue flush when an offload track is invalidated.
+
+Bug: 28566885
+CRs-Fixed: 1002438
+Change-Id: Ib6c38a3abb600598b87591bac90d03b7150d5216
+---
+ services/audioflinger/Threads.cpp | 16 ++++++++++++++--
+ services/audioflinger/Threads.h   |  4 +++-
+ 2 files changed, 17 insertions(+), 3 deletions(-)
+
+diff --git a/services/audioflinger/Threads.cpp b/services/audioflinger/Threads.cpp
+index ecdbf43..ee5dc24 100644
+--- a/services/audioflinger/Threads.cpp
++++ b/services/audioflinger/Threads.cpp
+@@ -2574,11 +2574,10 @@ void AudioFlinger::PlaybackThread::cacheParameters_l()
+     }
+ }
+
+-void AudioFlinger::PlaybackThread::invalidateTracks(audio_stream_type_t streamType)
++void AudioFlinger::PlaybackThread::invalidateTracks_l(audio_stream_type_t streamType)
+ {
+     ALOGV("MixerThread::invalidateTracks() mixer %p, streamType %d, mTracks.size %d",
+             this,  streamType, mTracks.size());
+-    Mutex::Autolock _l(mLock);
+
+     size_t size = mTracks.size();
+     for (size_t i = 0; i < size; i++) {
+@@ -2589,6 +2588,12 @@ void AudioFlinger::PlaybackThread::invalidateTracks(audio_stream_type_t streamTy
+     }
+ }
+
++void AudioFlinger::PlaybackThread::invalidateTracks(audio_stream_type_t streamType)
++{
++    Mutex::Autolock _l(mLock);
++    invalidateTracks_l(streamType);
++}
++
+ status_t AudioFlinger::PlaybackThread::addEffectChain_l(const sp<EffectChain>& chain)
+ {
+     int session = chain->sessionId();
+@@ -5371,6 +5376,13 @@ void AudioFlinger::OffloadThread::flushHw_l()
+     }
+ }
+
++void AudioFlinger::OffloadThread::invalidateTracks(audio_stream_type_t streamType)
++{
++    Mutex::Autolock _l(mLock);
++    mFlushPending = true;
++    PlaybackThread::invalidateTracks_l(streamType);
++}
++
+ // ----------------------------------------------------------------------------
+
+ AudioFlinger::DuplicatingThread::DuplicatingThread(const sp<AudioFlinger>& audioFlinger,
+diff --git a/services/audioflinger/Threads.h b/services/audioflinger/Threads.h
+index 48ff77d..8fab1e4 100644
+--- a/services/audioflinger/Threads.h
++++ b/services/audioflinger/Threads.h
+@@ -617,7 +617,8 @@ class PlaybackThread : public ThreadBase {
+                 virtual bool     isValidSyncEvent(const sp<SyncEvent>& event) const;
+
+                 // called with AudioFlinger lock held
+-                        void     invalidateTracks(audio_stream_type_t streamType);
++                void     invalidateTracks_l(audio_stream_type_t streamType);
++                virtual void     invalidateTracks(audio_stream_type_t streamType);
+
+     virtual     size_t      frameCount() const { return mNormalFrameCount; }
+
+@@ -1000,6 +1001,7 @@ class OffloadThread : public DirectOutputThread {
+
+     virtual     bool        waitingAsyncCallback();
+     virtual     bool        waitingAsyncCallback_l();
++    virtual     void        invalidateTracks(audio_stream_type_t streamType);
+
+ private:
+     size_t      mPausedWriteLength;     // length in bytes of write interrupted by pause
+
+From e4575aeb5d66f71b6ef6c611570ea96df81c1246 Mon Sep 17 00:00:00 2001
+From: Haynes Mathew George <hgeorge@codeaurora.org>
+Date: Thu, 5 May 2016 19:02:06 -0700
+Subject: [PATCH 46/60] audioflinger: Always process volume commands from a
+ latest track
+
+Process them irrespective of whether the track is invalid.
+Ignoring to do so may lead to glitches/loud bursts in audio when a new
+track reuses the same output.
+
+CRs-Fixed: 1002448
+Change-Id: I9afbdd221db3a7311eb0ec8bb75852cf5409084e
+---
+ services/audioflinger/Threads.cpp | 12 +++---------
+ 1 file changed, 3 insertions(+), 9 deletions(-)
+
+diff --git a/services/audioflinger/Threads.cpp b/services/audioflinger/Threads.cpp
+index ee5dc24..e5e8bdb 100644
+--- a/services/audioflinger/Threads.cpp
++++ b/services/audioflinger/Threads.cpp
+@@ -5169,15 +5169,9 @@ AudioFlinger::PlaybackThread::mixer_state AudioFlinger::OffloadThread::prepareTr
+         if (track->isInvalid()) {
+             ALOGW("An invalidated track shouldn't be in active list");
+             tracksToRemove->add(track);
+-            continue;
+-        }
+-
+-        if (track->mState == TrackBase::IDLE) {
++        } else if (track->mState == TrackBase::IDLE) {
+             ALOGW("An idle track shouldn't be in active list");
+-            continue;
+-        }
+-
+-        if (track->isPausing()) {
++        } else if (track->isPausing()) {
+             track->setPaused();
+             if (last) {
+                 if (mHwSupportsPause && !mHwPaused) {
+@@ -5200,7 +5194,7 @@ AudioFlinger::PlaybackThread::mixer_state AudioFlinger::OffloadThread::prepareTr
+             if (last) {
+                 mFlushPending = true;
+             }
+-        } else if (track->isResumePending()){
++        } else if (track->isResumePending()) {
+             track->resumeAck();
+             if (last) {
+                 if (mPausedBytesRemaining) {
+
+From 16d14e178003b193db1422c11c95bc0b1d44b690 Mon Sep 17 00:00:00 2001
+From: Steve Kondik <steve@cyngn.com>
+Date: Fri, 19 Aug 2016 17:41:21 -0700
+Subject: [PATCH 47/60] stagefright: Disable thumbnail mode for 8996-class
+ devices
+
+ * The hardware is freezing when used for certain media types. Disable
+   it until the issue is understood.
+
+Change-Id: Iaec2420b4f8d3ceacf2c6f72ab14db424092c96b
+---
+ media/libstagefright/FFMPEGSoftCodec.cpp | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/media/libstagefright/FFMPEGSoftCodec.cpp b/media/libstagefright/FFMPEGSoftCodec.cpp
+index 7233162..0d5802b 100644
+--- a/media/libstagefright/FFMPEGSoftCodec.cpp
++++ b/media/libstagefright/FFMPEGSoftCodec.cpp
+@@ -35,6 +35,8 @@
+ #include <media/stagefright/OMXCodec.h>
+ #include <media/stagefright/Utils.h>
+
++#include <cutils/properties.h>
++
+ #include <OMX_Component.h>
+ #include <OMX_AudioExt.h>
+ #include <OMX_IndexExt.h>
+@@ -394,9 +396,13 @@ status_t FFMPEGSoftCodec::setVideoFormat(
+         }
+
+         // Enable Sync-frame decode mode for thumbnails
++        char board[PROPERTY_VALUE_MAX];
++        property_get("ro.board.platform", board, NULL);
+         int32_t thumbnailMode = 0;
+         if (msg->findInt32("thumbnail-mode", &thumbnailMode) &&
+-                thumbnailMode > 0) {
++                thumbnailMode > 0 &&
++                !(!strcmp(board, "msm8996") || !strcmp(board, "msm8937") ||
++                 !strcmp(board, "msm8953") || !strcmp(board, "msm8976"))) {
+             ALOGV("Enabling thumbnail mode.");
+             QOMX_ENABLETYPE enableType;
+             OMX_INDEXTYPE indexType;
+
+From 4f7b529d2405e4929e424d4bb12e4fa5bce2fa04 Mon Sep 17 00:00:00 2001
+From: Andy Hung <hunga@google.com>
+Date: Wed, 17 Aug 2016 14:11:13 -0700
+Subject: [PATCH 48/60] Add EFFECT_CMD_SET_PARAM parameter checking
+
+Fix merge conflict to mnc-mr3-release
+Bug: 30204301
+Change-Id: Ib9c3ee1c2f23c96f8f7092dd9e146bc453d7a290
+---
+ services/audioflinger/Effects.cpp | 29 +++++++++++++++++++++++++++++
+ 1 file changed, 29 insertions(+)
+
+diff --git a/services/audioflinger/Effects.cpp b/services/audioflinger/Effects.cpp
+index 949c91d..f87b8f5 100644
+--- a/services/audioflinger/Effects.cpp
++++ b/services/audioflinger/Effects.cpp
+@@ -543,6 +543,13 @@ status_t AudioFlinger::EffectModule::remove_effect_from_hal_l()
+     return NO_ERROR;
+ }
+
++// round up delta valid if value and divisor are positive.
++template <typename T>
++static T roundUpDelta(const T &value, const T &divisor) {
++    T remainder = value % divisor;
++    return remainder == 0 ? 0 : divisor - remainder;
++}
++
+ status_t AudioFlinger::EffectModule::command(uint32_t cmdCode,
+                                              uint32_t cmdSize,
+                                              void *pCmdData,
+@@ -558,6 +565,28 @@ status_t AudioFlinger::EffectModule::command(uint32_t cmdCode,
+     if (mStatus != NO_ERROR) {
+         return mStatus;
+     }
++    if (cmdCode == EFFECT_CMD_GET_PARAM &&
++            (*replySize < sizeof(effect_param_t) ||
++                    ((effect_param_t *)pCmdData)->psize > *replySize - sizeof(effect_param_t))) {
++        android_errorWriteLog(0x534e4554, "29251553");
++        return -EINVAL;
++    }
++    if ((cmdCode == EFFECT_CMD_SET_PARAM
++            || cmdCode == EFFECT_CMD_SET_PARAM_DEFERRED) &&  // DEFERRED not generally used
++        (sizeof(effect_param_t) > cmdSize
++            || ((effect_param_t *)pCmdData)->psize > cmdSize
++                                                     - sizeof(effect_param_t)
++            || ((effect_param_t *)pCmdData)->vsize > cmdSize
++                                                     - sizeof(effect_param_t)
++                                                     - ((effect_param_t *)pCmdData)->psize
++            || roundUpDelta(((effect_param_t *)pCmdData)->psize, (uint32_t)sizeof(int)) >
++                                                     cmdSize
++                                                     - sizeof(effect_param_t)
++                                                     - ((effect_param_t *)pCmdData)->psize
++                                                     - ((effect_param_t *)pCmdData)->vsize)) {
++        android_errorWriteLog(0x534e4554, "30204301");
++        return -EINVAL;
++    }
+     status_t status = (*mEffectInterface)->command(mEffectInterface,
+                                                    cmdCode,
+                                                    cmdSize,
+
+From b569311fe413fef4f35114f00485340cc6e322ee Mon Sep 17 00:00:00 2001
+From: Pawin Vongmasa <pawin@google.com>
+Date: Mon, 18 Jul 2016 20:12:02 -0700
+Subject: [PATCH 49/60] SoftMPEG4: Check the buffer size before writing the
+ reference frame.
+
+Also prevent overflow in SoftMPEG4 and division by zero in SoftMPEG4Encoder.
+
+Bug: 30033990
+Change-Id: I7701f5fc54c2670587d122330e5dc851f64ed3c2
+(cherry picked from commit 695123195034402ca76169b195069c28c30342d3)
+---
+ .../codecs/m4v_h263/dec/SoftMPEG4.cpp              | 22 ++++++++++++++++++++--
+ .../codecs/m4v_h263/enc/SoftMPEG4Encoder.cpp       |  4 ++++
+ 2 files changed, 24 insertions(+), 2 deletions(-)
+
+diff --git a/media/libstagefright/codecs/m4v_h263/dec/SoftMPEG4.cpp b/media/libstagefright/codecs/m4v_h263/dec/SoftMPEG4.cpp
+index bb59ae4..e1cfc06 100644
+--- a/media/libstagefright/codecs/m4v_h263/dec/SoftMPEG4.cpp
++++ b/media/libstagefright/codecs/m4v_h263/dec/SoftMPEG4.cpp
+@@ -210,8 +210,17 @@ void SoftMPEG4::onQueueFilled(OMX_U32 /* portIndex */) {
+             PortInfo *port = editPortInfo(1);
+             OMX_BUFFERHEADERTYPE *outHeader = port->mBuffers.editItemAt(1).mHeader;
+
++            OMX_U32 yFrameSize = sizeof(uint8) * mHandle->size;
++            if ((outHeader->nAllocLen < yFrameSize) ||
++                    (outHeader->nAllocLen - yFrameSize < yFrameSize / 2)) {
++                ALOGE("Too small output buffer for reference frame: %zu bytes",
++                        outHeader->nAllocLen);
++                android_errorWriteLog(0x534e4554, "30033990");
++                notify(OMX_EventError, OMX_ErrorUndefined, 0, NULL);
++                mSignalledError = true;
++                return;
++            }
+             PVSetReferenceYUV(mHandle, outHeader->pBuffer);
+-
+             mFramesConfigured = true;
+         }
+
+@@ -229,7 +238,16 @@ void SoftMPEG4::onQueueFilled(OMX_U32 /* portIndex */) {
+         int32_t bufferSize = inHeader->nFilledLen;
+         int32_t tmp = bufferSize;
+
+-        OMX_U32 frameSize = (mWidth * mHeight * 3) / 2;
++        OMX_U32 frameSize;
++        OMX_U64 yFrameSize = (OMX_U64)mWidth * (OMX_U64)mHeight;
++        if (yFrameSize > ((OMX_U64)UINT32_MAX / 3) * 2) {
++            ALOGE("Frame size too large");
++            notify(OMX_EventError, OMX_ErrorUndefined, 0, NULL);
++            mSignalledError = true;
++            return;
++        }
++        frameSize = (OMX_U32)(yFrameSize + (yFrameSize / 2));
++
+         if (outHeader->nAllocLen < frameSize) {
+             android_errorWriteLog(0x534e4554, "27833616");
+             ALOGE("Insufficient output buffer size");
+diff --git a/media/libstagefright/codecs/m4v_h263/enc/SoftMPEG4Encoder.cpp b/media/libstagefright/codecs/m4v_h263/enc/SoftMPEG4Encoder.cpp
+index 7638bb7..2eb51c9 100644
+--- a/media/libstagefright/codecs/m4v_h263/enc/SoftMPEG4Encoder.cpp
++++ b/media/libstagefright/codecs/m4v_h263/enc/SoftMPEG4Encoder.cpp
+@@ -116,6 +116,10 @@ OMX_ERRORTYPE SoftMPEG4Encoder::initEncParams() {
+         ALOGE("Failed to get default encoding parameters");
+         return OMX_ErrorUndefined;
+     }
++    if (mFramerate == 0) {
++        ALOGE("Framerate should not be 0");
++        return OMX_ErrorUndefined;
++    }
+     mEncParams->encMode = mEncodeMode;
+     mEncParams->encWidth[0] = mWidth;
+     mEncParams->encHeight[0] = mHeight;
+
+From dda9d703d7dd2129ff6242fae84ca156caa38632 Mon Sep 17 00:00:00 2001
+From: Ray Essick <essick@google.com>
+Date: Tue, 16 Aug 2016 14:24:43 -0700
+Subject: [PATCH 50/60] better validation lengths of strings in ID3 tags
+
+Validate lengths on strings in ID3 tags, particularly around 0.
+Also added code to handle cases when we can't get memory for
+copies of strings we want to extract from these tags.
+
+Affects L/M/N/master, same patch for all of them.
+
+Bug: 30744884
+Change-Id: I2675a817a39f0927ec1f7e9f9c09f2e61020311e
+Test: play mp3 file which caused a <0 length.
+(cherry picked from commit d23c01546c4f82840a01a380def76ab6cae5d43f)
+---
+ media/libstagefright/id3/ID3.cpp | 57 +++++++++++++++++++++++++++++-----------
+ 1 file changed, 42 insertions(+), 15 deletions(-)
+
+diff --git a/media/libstagefright/id3/ID3.cpp b/media/libstagefright/id3/ID3.cpp
+index 4410579..6e14197 100644
+--- a/media/libstagefright/id3/ID3.cpp
++++ b/media/libstagefright/id3/ID3.cpp
+@@ -77,7 +77,10 @@ ID3::ID3(const uint8_t *data, size_t size, bool ignoreV1)
+       mFirstFrameOffset(0),
+       mVersion(ID3_UNKNOWN),
+       mRawSize(0) {
+-    sp<MemorySource> source = new MemorySource(data, size);
++    sp<MemorySource> source = new (std::nothrow) MemorySource(data, size);
++
++    if (source == NULL)
++        return;
+
+     mIsValid = parseV2(source, 0);
+
+@@ -542,6 +545,10 @@ void ID3::Iterator::getstring(String8 *id, bool otherdata) const {
+         n -= skipped;
+     }
+
++    if (n <= 0) {
++       return;
++    }
++
+     if (encoding == 0x00) {
+         // supposedly ISO 8859-1
+         id->setTo((const char*)frameData + 1, n);
+@@ -555,11 +562,16 @@ void ID3::Iterator::getstring(String8 *id, bool otherdata) const {
+         const char16_t *framedata = (const char16_t *) (frameData + 1);
+         char16_t *framedatacopy = NULL;
+ #if BYTE_ORDER == LITTLE_ENDIAN
+-        framedatacopy = new char16_t[len];
+-        for (int i = 0; i < len; i++) {
+-            framedatacopy[i] = bswap_16(framedata[i]);
++        if (len > 0) {
++            framedatacopy = new (std::nothrow) char16_t[len];
++            if (framedatacopy == NULL) {
++                return;
++            }
++            for (int i = 0; i < len; i++) {
++                framedatacopy[i] = bswap_16(framedata[i]);
++            }
++            framedata = framedatacopy;
+         }
+-        framedata = framedatacopy;
+ #endif
+         id->setTo(framedata, len);
+         if (framedatacopy != NULL) {
+@@ -572,15 +584,26 @@ void ID3::Iterator::getstring(String8 *id, bool otherdata) const {
+         const char16_t *framedata = (const char16_t *) (frameData + 1);
+         char16_t *framedatacopy = NULL;
+         if (*framedata == 0xfffe) {
+-            // endianness marker doesn't match host endianness, convert
+-            framedatacopy = new char16_t[len];
++            // endianness marker != host endianness, convert & skip
++            if (len <= 1) {
++                return;         // nothing after the marker
++            }
++            framedatacopy = new (std::nothrow) char16_t[len];
++            if (framedatacopy == NULL) {
++                return;
++            }
+             for (int i = 0; i < len; i++) {
+                 framedatacopy[i] = bswap_16(framedata[i]);
+             }
+             framedata = framedatacopy;
+-        }
+-        // If the string starts with an endianness marker, skip it
+-        if (*framedata == 0xfeff) {
++            // and skip over the marker
++            framedata++;
++            len--;
++        } else if (*framedata == 0xfeff) {
++            // endianness marker == host endianness, skip it
++            if (len <= 1) {
++                return;         // nothing after the marker
++            }
+             framedata++;
+             len--;
+         }
+@@ -595,12 +618,16 @@ void ID3::Iterator::getstring(String8 *id, bool otherdata) const {
+         }
+         if (eightBit) {
+             // collapse to 8 bit, then let the media scanner client figure out the real encoding
+-            char *frame8 = new char[len];
+-            for (int i = 0; i < len; i++) {
+-                frame8[i] = framedata[i];
++            char *frame8 = new (std::nothrow) char[len];
++            if (frame8 != NULL) {
++                for (int i = 0; i < len; i++) {
++                    frame8[i] = framedata[i];
++                }
++                id->setTo(frame8, len);
++                delete [] frame8;
++            } else {
++                id->setTo(framedata, len);
+             }
+-            id->setTo(frame8, len);
+-            delete [] frame8;
+         } else {
+             id->setTo(framedata, len);
+         }
+
+From 4c086a8dc1d9c9772ac705d2a1509b311985e374 Mon Sep 17 00:00:00 2001
+From: Robert Shih <robertshih@google.com>
+Date: Tue, 16 Aug 2016 16:50:54 -0700
+Subject: [PATCH 51/60] MediaPlayerService: avoid invalid static cast
+
+Bug: 30204103
+Change-Id: Ie0dd3568a375f1e9fed8615ad3d85184bcc99028
+(cherry picked from commit ee0a0e39acdcf8f97e0d6945c31ff36a06a36e9d)
+---
+ media/libmediaplayerservice/MediaPlayerService.cpp | 10 ++++++++++
+ media/libmediaplayerservice/MediaPlayerService.h   |  1 +
+ 2 files changed, 11 insertions(+)
+
+diff --git a/media/libmediaplayerservice/MediaPlayerService.cpp b/media/libmediaplayerservice/MediaPlayerService.cpp
+index b8c610d..0483228 100644
+--- a/media/libmediaplayerservice/MediaPlayerService.cpp
++++ b/media/libmediaplayerservice/MediaPlayerService.cpp
+@@ -559,6 +559,12 @@ void MediaPlayerService::removeClient(wp<Client> client)
+     mClients.remove(client);
+ }
+
++bool MediaPlayerService::hasClient(wp<Client> client)
++{
++    Mutex::Autolock lock(mLock);
++    return mClients.indexOf(client) != NAME_NOT_FOUND;
++}
++
+ MediaPlayerService::Client::Client(
+         const sp<MediaPlayerService>& service, pid_t pid,
+         int32_t connId, const sp<IMediaPlayerClient>& client,
+@@ -1056,6 +1062,10 @@ status_t MediaPlayerService::Client::setNextPlayer(const sp<IMediaPlayer>& playe
+     ALOGV("setNextPlayer");
+     Mutex::Autolock l(mLock);
+     sp<Client> c = static_cast<Client*>(player.get());
++    if (!mService->hasClient(c)) {
++      return BAD_VALUE;
++    }
++
+     mNextClient = c;
+
+     if (c != NULL) {
+diff --git a/media/libmediaplayerservice/MediaPlayerService.h b/media/libmediaplayerservice/MediaPlayerService.h
+index 60d4617..e8e5360 100644
+--- a/media/libmediaplayerservice/MediaPlayerService.h
++++ b/media/libmediaplayerservice/MediaPlayerService.h
+@@ -226,6 +226,7 @@ class MediaPlayerService : public BnMediaPlayerService
+     virtual status_t            dump(int fd, const Vector<String16>& args);
+
+             void                removeClient(wp<Client> client);
++            bool                hasClient(wp<Client> client);
+
+     // For battery usage tracking purpose
+     struct BatteryUsageInfo {
+
+From b6af3b9bc072c4d832db9dc93ff818472cd50069 Mon Sep 17 00:00:00 2001
+From: Eric Laurent <elaurent@google.com>
+Date: Wed, 17 Aug 2016 06:19:32 -0700
+Subject: [PATCH 52/60] soundtrigger: add size check on sound model and
+ recogntion data
+
+Bug: 30148546
+
+Change-Id: I082f535a853c96571887eeea37c6d41ecee7d8c0
+(cherry picked from commit bb00d8f139ff51336ab3c810d35685003949bcf8)
+(cherry picked from commit ef0c91518446e65533ca8bab6726a845f27c73fd)
+---
+ services/soundtrigger/SoundTriggerHwService.cpp | 38 +++++++++++++++++++------
+ 1 file changed, 30 insertions(+), 8 deletions(-)
+
+diff --git a/services/soundtrigger/SoundTriggerHwService.cpp b/services/soundtrigger/SoundTriggerHwService.cpp
+index 9de6fe2..e428388 100644
+--- a/services/soundtrigger/SoundTriggerHwService.cpp
++++ b/services/soundtrigger/SoundTriggerHwService.cpp
+@@ -534,6 +534,22 @@ status_t SoundTriggerHwService::Module::loadSoundModel(const sp<IMemory>& modelM
+     struct sound_trigger_sound_model *sound_model =
+             (struct sound_trigger_sound_model *)modelMemory->pointer();
+
++    size_t structSize;
++    if (sound_model->type == SOUND_MODEL_TYPE_KEYPHRASE) {
++        structSize = sizeof(struct sound_trigger_phrase_sound_model);
++    } else {
++        structSize = sizeof(struct sound_trigger_sound_model);
++    }
++
++    if (sound_model->data_offset < structSize ||
++           sound_model->data_size > (UINT_MAX - sound_model->data_offset) ||
++           modelMemory->size() < sound_model->data_offset ||
++           sound_model->data_size > (modelMemory->size() - sound_model->data_offset)) {
++        android_errorWriteLog(0x534e4554, "30148546");
++        ALOGE("loadSoundModel() data_size is too big");
++        return BAD_VALUE;
++    }
++
+     AutoMutex lock(mLock);
+
+     if (mModels.size() >= mDescriptor.properties.max_sound_models) {
+@@ -603,11 +619,23 @@ status_t SoundTriggerHwService::Module::startRecognition(sound_model_handle_t ha
+         return PERMISSION_DENIED;
+     }
+
+-    if (dataMemory != 0 && dataMemory->pointer() == NULL) {
+-        ALOGE("startRecognition() dataMemory is non-0 but has NULL pointer()");
++    if (dataMemory == 0 || dataMemory->pointer() == NULL) {
++        ALOGE("startRecognition() dataMemory is 0 or has NULL pointer()");
+         return BAD_VALUE;
+
+     }
++
++    struct sound_trigger_recognition_config *config =
++            (struct sound_trigger_recognition_config *)dataMemory->pointer();
++
++    if (config->data_offset < sizeof(struct sound_trigger_recognition_config) ||
++            config->data_size > (UINT_MAX - config->data_offset) ||
++            dataMemory->size() < config->data_offset ||
++            config->data_size > (dataMemory->size() - config->data_offset)) {
++        ALOGE("startRecognition() data_size is too big");
++        return BAD_VALUE;
++    }
++
+     AutoMutex lock(mLock);
+     if (mServiceState == SOUND_TRIGGER_STATE_DISABLED) {
+         return INVALID_OPERATION;
+@@ -616,17 +644,11 @@ status_t SoundTriggerHwService::Module::startRecognition(sound_model_handle_t ha
+     if (model == 0) {
+         return BAD_VALUE;
+     }
+-    if ((dataMemory == 0) ||
+-            (dataMemory->size() < sizeof(struct sound_trigger_recognition_config))) {
+-        return BAD_VALUE;
+-    }
+
+     if (model->mState == Model::STATE_ACTIVE) {
+         return INVALID_OPERATION;
+     }
+
+-    struct sound_trigger_recognition_config *config =
+-            (struct sound_trigger_recognition_config *)dataMemory->pointer();
+
+     //TODO: get capture handle and device from audio policy service
+     config->capture_handle = model->mCaptureIOHandle;
+
+From 089104004f5aeb2634764c56b948ef83318a9f95 Mon Sep 17 00:00:00 2001
+From: Pawin Vongmasa <pawin@google.com>
+Date: Fri, 19 Aug 2016 02:07:33 -0700
+Subject: [PATCH 53/60] Fix build breakage caused by commit
+ 940829f69b52d6038db66a9c727534636ecc456d.
+
+Change-Id: I4776db4a26fb3c31bb994d48788373fe569c812a
+(cherry picked from commit baa9146401e28c5acf54dea21ddd197f0d3a8fcd)
+---
+ media/libstagefright/codecs/m4v_h263/dec/SoftMPEG4.cpp | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/media/libstagefright/codecs/m4v_h263/dec/SoftMPEG4.cpp b/media/libstagefright/codecs/m4v_h263/dec/SoftMPEG4.cpp
+index e1cfc06..1dd631a 100644
+--- a/media/libstagefright/codecs/m4v_h263/dec/SoftMPEG4.cpp
++++ b/media/libstagefright/codecs/m4v_h263/dec/SoftMPEG4.cpp
+@@ -213,8 +213,8 @@ void SoftMPEG4::onQueueFilled(OMX_U32 /* portIndex */) {
+             OMX_U32 yFrameSize = sizeof(uint8) * mHandle->size;
+             if ((outHeader->nAllocLen < yFrameSize) ||
+                     (outHeader->nAllocLen - yFrameSize < yFrameSize / 2)) {
+-                ALOGE("Too small output buffer for reference frame: %zu bytes",
+-                        outHeader->nAllocLen);
++                ALOGE("Too small output buffer for reference frame: %lu bytes",
++                        (unsigned long)outHeader->nAllocLen);
+                 android_errorWriteLog(0x534e4554, "30033990");
+                 notify(OMX_EventError, OMX_ErrorUndefined, 0, NULL);
+                 mSignalledError = true;
+
+From bdb54da9baf8349a1f030064c3af4ff7318f4771 Mon Sep 17 00:00:00 2001
+From: Diogo Ferreira <defer@cyngn.com>
+Date: Tue, 30 Aug 2016 11:41:42 +0100
+Subject: [PATCH 54/60] libstagefright: mtk: Use vendor extensions to check if
+ we should fixup cropping
+
+For mediatek video codecs, validate that the current cropped rectangle
+is valid and use the full frame size otherwise. This fixes a bug where
+format changes in the same native window would preserve the previous
+cropping and cause most of the image to be off-screen.
+
+Change-Id: If56ca11453f5d2e04a4138b2efe28203f30ba569
+Ticket: PORRIDGE-440
+---
+ media/libstagefright/ACodec.cpp | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
 diff --git a/media/libstagefright/ACodec.cpp b/media/libstagefright/ACodec.cpp
-index 802a193..e41f85f 100755
+index 427728f..e00e673 100644
 --- a/media/libstagefright/ACodec.cpp
 +++ b/media/libstagefright/ACodec.cpp
-@@ -41,8 +41,10 @@
-#include <OMX_Component.h>
-#include <OMX_IndexExt.h>
+@@ -4209,6 +4209,16 @@ status_t ACodec::getPortFormat(OMX_U32 portIndex, sp<AMessage> &notify) {
+                         rect.nWidth = videoDef->nFrameWidth;
+                         rect.nHeight = videoDef->nFrameHeight;
+                     }
++#ifdef MTK_HARDWARE
++                    if (!strncmp(mComponentName.c_str(), "OMX.MTK.", 8) && mOMX->getConfig(
++                            mNode, (OMX_INDEXTYPE) 0x7f00001c /* OMX_IndexVendorMtkOmxVdecGetCropInfo */,
++                            &rect, sizeof(rect)) != OK) {
++                        rect.nLeft = 0;
++                        rect.nTop = 0;
++                        rect.nWidth = videoDef->nFrameWidth;
++                        rect.nHeight = videoDef->nFrameHeight;
++                    }
++#endif
 
+                     if (rect.nLeft < 0 ||
+                         rect.nTop < 0 ||
+
+From f42ee8bd0cb51c571dd6dfcf71c61dce377768cd Mon Sep 17 00:00:00 2001
+From: Wei Jia <wjia@google.com>
+Date: Tue, 30 Aug 2016 13:49:06 -0700
+Subject: [PATCH 55/60] MediaPlayerService: allow next player to be NULL
+
+Bug: 31155917
+Bug: 30204103
+Change-Id: I9a2a59ddb900fc942e7c19b31b53a110d790474c
+(cherry picked from commit 282841278723166e74039329ca56e444ad472daf)
+---
+ media/libmediaplayerservice/MediaPlayerService.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/media/libmediaplayerservice/MediaPlayerService.cpp b/media/libmediaplayerservice/MediaPlayerService.cpp
+index 0483228..f802de1 100644
+--- a/media/libmediaplayerservice/MediaPlayerService.cpp
++++ b/media/libmediaplayerservice/MediaPlayerService.cpp
+@@ -1062,7 +1062,7 @@ status_t MediaPlayerService::Client::setNextPlayer(const sp<IMediaPlayer>& playe
+     ALOGV("setNextPlayer");
+     Mutex::Autolock l(mLock);
+     sp<Client> c = static_cast<Client*>(player.get());
+-    if (!mService->hasClient(c)) {
++    if (c != NULL && !mService->hasClient(c)) {
+       return BAD_VALUE;
+     }
+
+
+From 3f6bb688b22b184b0bfc2739cda3c3cf0dd06a14 Mon Sep 17 00:00:00 2001
+From: irii <iriijo@googlemail.com>
+Date: Sun, 11 Sep 2016 16:51:37 +0200
+Subject: [PATCH 56/60] libcameraservice: Don't pass NULL args on setCallbacks
+ call
+
+*This fixes the torch light for cameras with hal 1
+
+*This fix works on the htc m7ul
+
+*Fixed line length
+*Fixed unused parameter names
+
+Change-Id: I89c6112546e36dbcca099f4d5cd70371b2c5340a
+---
+ services/camera/libcameraservice/CameraFlashlight.cpp | 14 +++++++++++++-
+ 1 file changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/services/camera/libcameraservice/CameraFlashlight.cpp b/services/camera/libcameraservice/CameraFlashlight.cpp
+index 406c1c4..62ce610 100644
+--- a/services/camera/libcameraservice/CameraFlashlight.cpp
++++ b/services/camera/libcameraservice/CameraFlashlight.cpp
+@@ -828,6 +828,18 @@ status_t CameraHardwareInterfaceFlashControl::initializePreviewWindow(
+     return device->setPreviewWindow(mSurface);
+ }
+
++static void notifyCallback(int32_t, int32_t, int32_t, void*) {
++    /* Empty */
++}
++
++static void dataCallback(int32_t, const sp<IMemory>&, camera_frame_metadata_t*, void*) {
++    /* Empty */
++}
++
++static void dataCallbackTimestamp(nsecs_t, int32_t, const sp<IMemory>&, void*) {
++    /* Empty */
++}
++
+ status_t CameraHardwareInterfaceFlashControl::connectCameraDevice(
+         const String8& cameraId) {
+     sp<CameraHardwareInterface> device =
+@@ -841,7 +853,7 @@ status_t CameraHardwareInterfaceFlashControl::connectCameraDevice(
+     }
+
+     // need to set __get_memory in set_callbacks().
+-    device->setCallbacks(NULL, NULL, NULL, NULL);
++    device->setCallbacks(notifyCallback, dataCallback, dataCallbackTimestamp, this);
+
+     mParameters = device->getParameters();
+
+
+From 2e39b85cae7025786fade45ba90583c1729ffe42 Mon Sep 17 00:00:00 2001
+From: Ziyan <jaraidaniel@gmail.com>
+Date: Tue, 21 Apr 2015 15:07:13 +0200
+Subject: [PATCH 57/60] libstagefright: wfd: don't use intra macroblock refresh
+ mode on omap4
+
+Most, if not all OMAP4 Ducatis doesn't support intra macroblock refresh mode,
+causing the encoder to fail initializing.
+This patch disables intra macroblock refresh mode for wifi display on omap4.
+
+Note:
+Ideally, the decoder shouldn't fail if intra macroblock refresh mode can't be
+configured. However, that would trick higher layers into thinking that it's on,
+because they set that parameter.
+As of now, this mode seems to only ever be used for wifi display.
+
+Change-Id: I9696af8f22db82cc436a351e4d93bf7323588f43
+---
+ media/libstagefright/wifi-display/Android.mk           | 4 ++++
+ media/libstagefright/wifi-display/source/Converter.cpp | 2 ++
+ 2 files changed, 6 insertions(+)
+
+diff --git a/media/libstagefright/wifi-display/Android.mk b/media/libstagefright/wifi-display/Android.mk
+index fb28624..6f17747 100644
+--- a/media/libstagefright/wifi-display/Android.mk
++++ b/media/libstagefright/wifi-display/Android.mk
+@@ -33,6 +33,10 @@ LOCAL_SHARED_LIBRARIES:= \
+ LOCAL_CFLAGS += -Wno-multichar -Werror -Wall
+ LOCAL_CLANG := true
+
++ifeq ($(BOARD_NO_INTRA_MACROBLOCK_MODE_SUPPORT),true)
++LOCAL_CFLAGS += -DBOARD_NO_INTRA_MACROBLOCK_MODE_SUPPORT
++endif
++
+ LOCAL_MODULE:= libstagefright_wfd
+
+ LOCAL_MODULE_TAGS:= optional
+diff --git a/media/libstagefright/wifi-display/source/Converter.cpp b/media/libstagefright/wifi-display/source/Converter.cpp
+index 471152e..9a2d08a 100644
+--- a/media/libstagefright/wifi-display/source/Converter.cpp
++++ b/media/libstagefright/wifi-display/source/Converter.cpp
+@@ -173,8 +173,10 @@ status_t Converter::initEncoder() {
+         mOutputFormat->setInt32("frame-rate", 30);
+         mOutputFormat->setInt32("i-frame-interval", 15);  // Iframes every 15 secs
+
++#ifndef BOARD_NO_INTRA_MACROBLOCK_MODE_SUPPORT
+         // Configure encoder to use intra macroblock refresh mode
+         mOutputFormat->setInt32("intra-refresh-mode", OMX_VIDEO_IntraRefreshCyclic);
++#endif
+
+         int width, height, mbs;
+         if (!mOutputFormat->findInt32("width", &width)
+
+From 1c6e16c0b4082c0edaca4fcc0838f33bf14ffac8 Mon Sep 17 00:00:00 2001
+From: Andreas Blaesius <skate4life@gmx.de>
+Date: Tue, 8 Nov 2016 03:24:23 -0700
+Subject: [PATCH 58/60] Allow to use baseline profile for AVC recording
+
+- some encoder seem to crash using higher h264 profiles
+
+Change-Id: I2beb881e76519f872e3e99957f8b981eeaa53b56
+---
+ media/libstagefright/ACodec.cpp | 2 +-
+ media/libstagefright/Android.mk | 4 ++++
+ 2 files changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/media/libstagefright/ACodec.cpp b/media/libstagefright/ACodec.cpp
+index e00e673..d2389f6 100644
+--- a/media/libstagefright/ACodec.cpp
++++ b/media/libstagefright/ACodec.cpp
+@@ -3568,7 +3568,7 @@ status_t ACodec::setupAVCEncoderParameters(const sp<AMessage> &msg) {
+
+     // XXX
+     // Allow higher profiles to be set since the encoder seems to support
+-#if 0
++#ifdef USE_AVC_BASELINE_PROFILE
+     if (h264type.eProfile != OMX_VIDEO_AVCProfileBaseline) {
+         ALOGW("Use baseline profile instead of %d for AVC recording",
+             h264type.eProfile);
+diff --git a/media/libstagefright/Android.mk b/media/libstagefright/Android.mk
+index 29fb418..792c139 100644
+--- a/media/libstagefright/Android.mk
++++ b/media/libstagefright/Android.mk
+@@ -173,6 +173,10 @@ ifeq ($(TARGET_BOARD_PLATFORM),omap4)
+ LOCAL_CFLAGS += -DBOARD_CANT_REALLOCATE_OMX_BUFFERS
+ endif
+
++ifeq ($(TARGET_USE_AVC_BASELINE_PROFILE), true)
++LOCAL_CFLAGS += -DUSE_AVC_BASELINE_PROFILE
++endif
++
+ ifeq ($(call is-vendor-board-platform,QCOM),true)
+ LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio
+ ifeq ($(strip $(AUDIO_FEATURE_ENABLED_EXTN_FLAC_DECODER)),true)
+
+From f3ee0168dfaff4838f0120d6eab09308d96bbe88 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Ng=C3=B4=20Minh=20Quang?= <ngoquang2708@gmail.com>
+Date: Mon, 23 May 2016 18:33:17 +0700
+Subject: [PATCH 59/60] libstagefright: add support for SPRD codecs
+
+---
+ media/libstagefright/ACodec.cpp       |  6 ++++++
+ media/libstagefright/CameraSource.cpp |  2 +-
+ media/libstagefright/OMXCodec.cpp     | 27 +++++++++++++++++++++++++++
+ 3 files changed, 34 insertions(+), 1 deletion(-)
+
+diff --git a/media/libstagefright/ACodec.cpp b/media/libstagefright/ACodec.cpp
+index d2389f6..a223877 100644
+--- a/media/libstagefright/ACodec.cpp
++++ b/media/libstagefright/ACodec.cpp
+@@ -56,8 +56,10 @@
+ #include <OMX_AsString.h>
+
+ #ifdef USE_SAMSUNG_COLORFORMAT
 +#ifndef SPRD_HARDWARE
  #include <sec_format.h>
  #endif
 +#endif
 
- #ifdef USE_TI_CUSTOM_DOMX
- #include <OMX_TI_IVCommon.h>
-@@ -910,6 +912,10 @@ void ACodec::setNativeWindowColorFormat(OMX_COLOR_FORMATTYPE &eNativeColorFormat
- {
-     // In case of Samsung decoders, we set proper native color format for the Native Window
+ #include "include/avc_utils.h"
+
+@@ -1315,6 +1317,10 @@ void ACodec::setNativeWindowColorFormat(OMX_COLOR_FORMATTYPE &eNativeColorFormat
      if (!strcasecmp(mComponentName.c_str(), "OMX.SEC.AVC.Decoder")
+         || !strcasecmp(mComponentName.c_str(), "OMX.SEC.FP.AVC.Decoder")
+         || !strcasecmp(mComponentName.c_str(), "OMX.SEC.MPEG4.Decoder")
 +        || !strcasecmp(mComponentName.c_str(), "OMX.sprd.mpeg4.decoder")
 +        || !strcasecmp(mComponentName.c_str(), "OMX.sprd.h263.decoder")
 +        || !strcasecmp(mComponentName.c_str(), "OMX.sprd.h264.decoder")
 +        || !strcasecmp(mComponentName.c_str(), "OMX.sprd.vpx.decoder")
-         || !strcasecmp(mComponentName.c_str(), "OMX.SEC.FP.AVC.Decoder")) {
+         || !strcasecmp(mComponentName.c_str(), "OMX.Exynos.AVC.Decoder")) {
          switch (eNativeColorFormat) {
              case OMX_COLOR_FormatYUV420SemiPlanar:
 diff --git a/media/libstagefright/CameraSource.cpp b/media/libstagefright/CameraSource.cpp
-index 4978c08..191abf3 100644
+index f6b4741..2bd34ea 100644
 --- a/media/libstagefright/CameraSource.cpp
 +++ b/media/libstagefright/CameraSource.cpp
-@@ -122,7 +122,7 @@ static int32_t getColorFormat(const char* colorFormat) {
+@@ -116,7 +116,7 @@ static int32_t getColorFormat(const char* colorFormat) {
      }
 
      if (!strcmp(colorFormat, CameraParameters::PIXEL_FORMAT_YUV420SP)) {
@@ -38,29 +3980,103 @@ index 4978c08..191abf3 100644
          return OMX_SEC_COLOR_FormatNV12LPhysicalAddress;
  #else
 diff --git a/media/libstagefright/OMXCodec.cpp b/media/libstagefright/OMXCodec.cpp
-index 8816dd2..4371f6f 100644
+index de00ff2..527f9d3 100644
 --- a/media/libstagefright/OMXCodec.cpp
 +++ b/media/libstagefright/OMXCodec.cpp
-@@ -66,8 +66,10 @@
- #endif
-
- #ifdef USE_SAMSUNG_COLORFORMAT
-+#ifndef SPRD_HARDWARE
- #include <sec_format.h>
- #endif
+@@ -270,6 +270,11 @@ uint32_t OMXCodec::getComponentQuirks(
+     if (info->hasQuirk("output-buffers-are-unreadable")) {
+         quirks |= kOutputBuffersAreUnreadable;
+     }
++#ifdef SPRD_HARDWARE
++    if (info->hasQuirk("needs-flush-before-disable")) {
++        quirks |= kNeedsFlushBeforeDisable;
++    }
 +#endif
 
- #ifdef USE_TI_CUSTOM_DOMX
- #include <OMX_TI_Video.h>
-@@ -2438,9 +2440,11 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
-     OMX_COLOR_FORMATTYPE eColorFormat;
+     return quirks;
+ }
+@@ -1799,6 +1804,27 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
+ #endif
+     }
 
-     switch (def.format.video.eColorFormat) {
-+#ifndef SPRD_HARDWARE
-     case OMX_SEC_COLOR_FormatNV12TPhysicalAddress:
-         eColorFormat = (OMX_COLOR_FORMATTYPE)HAL_PIXEL_FORMAT_CUSTOM_YCbCr_420_SP_TILED;
-         break;
++#ifdef USE_SAMSUNG_COLORFORMAT
++    OMX_COLOR_FORMATTYPE eNativeColorFormat = def.format.video.eColorFormat;
++    // Convert OpenMAX color format to native color format
++    switch (eNativeColorFormat) {
++    case OMX_COLOR_FormatYUV420SemiPlanar:
++        eNativeColorFormat = (OMX_COLOR_FORMATTYPE)HAL_PIXEL_FORMAT_YCbCr_420_SP;
++        break;
++    case OMX_COLOR_FormatYUV420Planar:
++        // Fallthrough
++    default:
++        eNativeColorFormat = (OMX_COLOR_FORMATTYPE)HAL_PIXEL_FORMAT_YCbCr_420_P;
++        break;
++    }
++    err = setNativeWindowSizeFormatAndUsage(
++            mNativeWindow.get(),
++            def.format.video.nFrameWidth,
++            def.format.video.nFrameHeight,
++            eNativeColorFormat,
++            rotationDegrees,
++            usage | GRALLOC_USAGE_HW_TEXTURE | GRALLOC_USAGE_EXTERNAL_DISP);
++#else
+     err = setNativeWindowSizeFormatAndUsage(
+             mNativeWindow.get(),
+             def.format.video.nFrameWidth,
+@@ -1806,6 +1832,7 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
+             def.format.video.eColorFormat,
+             rotationDegrees,
+             usage | GRALLOC_USAGE_HW_TEXTURE | GRALLOC_USAGE_EXTERNAL_DISP);
 +#endif
-     case OMX_COLOR_FormatYUV420SemiPlanar:
-         eColorFormat = (OMX_COLOR_FORMATTYPE)HAL_PIXEL_FORMAT_YCbCr_420_SP;
-         break;
+     if (err != 0) {
+         return err;
+     }
+
+From c25d64082547bd113398358782df29ed89faa94c Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Ng=C3=B4=20Minh=20Quang?= <ngoquang2708@gmail.com>
+Date: Mon, 18 Jul 2016 16:48:13 +0700
+Subject: [PATCH 60/60] Add SPRD FM devices to audio policy config parsing
+ utils
+
+---
+ .../common/managerdefinitions/include/ConfigParsingUtils.h          | 6 ++++++
+ .../common/managerdefinitions/src/ConfigParsingUtils.cpp            | 2 +-
+ 2 files changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/services/audiopolicy/common/managerdefinitions/include/ConfigParsingUtils.h b/services/audiopolicy/common/managerdefinitions/include/ConfigParsingUtils.h
+index 6f80435..bf854f3 100644
+--- a/services/audiopolicy/common/managerdefinitions/include/ConfigParsingUtils.h
++++ b/services/audiopolicy/common/managerdefinitions/include/ConfigParsingUtils.h
+@@ -72,6 +72,9 @@ const StringToEnum sDeviceTypeToEnumTable[] = {
+     STRING_TO_ENUM(AUDIO_DEVICE_OUT_HDMI_ARC),
+     STRING_TO_ENUM(AUDIO_DEVICE_OUT_SPDIF),
+     STRING_TO_ENUM(AUDIO_DEVICE_OUT_FM),
++    STRING_TO_ENUM(AUDIO_DEVICE_OUT_FM_HEADSET),
++    STRING_TO_ENUM(AUDIO_DEVICE_OUT_FM_SPEAKER),
++    STRING_TO_ENUM(AUDIO_DEVICE_OUT_ALL_FM),
+     STRING_TO_ENUM(AUDIO_DEVICE_OUT_AUX_LINE),
+     STRING_TO_ENUM(AUDIO_DEVICE_OUT_IP),
+ #ifdef AUDIO_EXTN_AFE_PROXY_ENABLED
+@@ -131,6 +134,9 @@ const StringToEnum sDeviceNameToEnumTable[] = {
+     NAME_TO_ENUM("HDMI ARC Out", AUDIO_DEVICE_OUT_HDMI_ARC),
+     NAME_TO_ENUM("S/PDIF Out", AUDIO_DEVICE_OUT_SPDIF),
+     NAME_TO_ENUM("FM transceiver Out", AUDIO_DEVICE_OUT_FM),
++    NAME_TO_ENUM("FM Headset Out", AUDIO_DEVICE_OUT_FM_HEADSET),
++    NAME_TO_ENUM("FM Speaker Out", AUDIO_DEVICE_OUT_FM_SPEAKER),
++    NAME_TO_ENUM("", AUDIO_DEVICE_OUT_ALL_FM),
+     NAME_TO_ENUM("Aux Line Out", AUDIO_DEVICE_OUT_AUX_LINE),
+     NAME_TO_ENUM("IP Out", AUDIO_DEVICE_OUT_IP),
+     NAME_TO_ENUM("Ambient Mic", AUDIO_DEVICE_IN_AMBIENT),
+diff --git a/services/audiopolicy/common/managerdefinitions/src/ConfigParsingUtils.cpp b/services/audiopolicy/common/managerdefinitions/src/ConfigParsingUtils.cpp
+index 89ef045..c718d32 100644
+--- a/services/audiopolicy/common/managerdefinitions/src/ConfigParsingUtils.cpp
++++ b/services/audiopolicy/common/managerdefinitions/src/ConfigParsingUtils.cpp
+@@ -15,7 +15,7 @@
+  */
+
+ #define LOG_TAG "APM::ConfigParsingUtils"
+-//#define LOG_NDEBUG 0
++#define LOG_NDEBUG 0
+
+ #include "ConfigParsingUtils.h"
+ #include "AudioGain.h"

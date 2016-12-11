@@ -45,9 +45,15 @@ BOARD_CACHEIMAGE_FILE_SYSTEM_TYPE := ext4
 BOARD_FLASH_BLOCK_SIZE := 131072
 USE_OPENGL_RENDERER := true
 TARGET_RUNNING_WITHOUT_SYNC_FRAMEWORK := true
+COMMON_GLOBAL_CFLAGS += -DFORCE_SCREENSHOT_CPU_PATH
+NUM_FRAMEBUFFER_SURFACE_BUFFERS := 3
 
 TARGET_BOARD_INFO_FILE := device/samsung/gtexslte/board-info.txt
 BOARD_EGL_CFG := device/samsung/gtexslte/egl.cfg
+
+# Resolution
+TARGET_SCREEN_WIDTH := 800
+TARGET_SCREEN_HEIGHT := 1280
 
 USE_SPRD_HWCOMPOSER := true
 USE_OPENGL_RENDERER := true
@@ -57,17 +63,17 @@ USE_OVERLAY_COMPOSER_GPU := true
 USE_SPRD_DITHER := true
 DEVICE_FORCE_VIDEO_GO_OVERLAYCOMPOSER := true
 BOARD_EGL_WORKAROUND_BUG_10194508 := true
-# HWUI_COMPILE_FOR_PERF := true
+HWUI_COMPILE_FOR_PERF := true
 TARGET_FORCE_HWC_FOR_VIRTUAL_DISPLAYS := true
 TARGET_REQUIRES_SYNCHRONOUS_SETSURFACE := true
 COMMON_GLOBAL_CFLAGS += -DSC8830_HWC
-COMMON_GLOBAL_CFLAGS += -DBOARD_CANT_REALLOCATE_OMX_BUFFERS
+BOARD_CANT_REALLOCATE_OMX_BUFFERS := true
 
 BOARD_RIL_CLASS := ../../../device/samsung/gtexslte/ril
 
-# Bluetooth
-BOARD_HAVE_BLUETOOTH := true
-BOARD_HAVE_BLUETOOTH_SPRD := true
+# FM radio
+BOARD_HAVE_FM_BCM := true
+
 BOARD_BLUETOOTH_BDROID_BUILDCFG_INCLUDE_DIR := device/samsung/gtexslte/bluetooth
 BOARD_BLUEDROID_VENDOR_CONF := device/samsung/gtexslte/bluetooth/libbt_vndcfg.txt
 
@@ -93,24 +99,24 @@ BOARD_CHARGING_MODE_BOOTING_LPM := /sys/class/power_supply/battery/batt_lp_charg
 
 # Integrated kernel building configs
 
-# TARGET_KERNEL_SOURCE := kernel/samsung/gtexslte
-# TARGET_KERNEL_CONFIG := gtexslte_defconfig
-# TARGET_VARIANT_CONFIG := gtexslte_defconfig
-# TARGET_SELINUX_CONFIG := gtexslte_defconfig
-#
-# SC9830_MODULES:
-# 	mkdir -p $(PRODUCT_OUT)/root/lib/modules
-# 	mkdir -p $(PRODUCT_OUT)/recovery/root/lib/modules
-# 	make -C $(TARGET_KERNEL_SOURCE)/external_module/mali MALI_PLATFORM=sc8830 BUILD=release KDIR=$(KERNEL_OUT)
-# 	cp $(TARGET_KERNEL_SOURCE)/external_module/mali/*.ko $(PRODUCT_OUT)/root/lib/modules
-# 	cp $(TARGET_KERNEL_SOURCE)/external_module/mali/*.ko $(PRODUCT_OUT)/recovery/root/lib/modules
-# 	make -C $(TARGET_KERNEL_SOURCE)/external_module/wifi KDIR=$(KERNEL_OUT) clean
-# 	make -C $(TARGET_KERNEL_SOURCE)/external_module/wifi KDIR=$(KERNEL_OUT)
-# 	cp $(TARGET_KERNEL_SOURCE)/external_module/wifi/*.ko $(PRODUCT_OUT)/root/lib/modules
-# 	cp $(TARGET_KERNEL_SOURCE)/external_module/wifi/*.ko $(PRODUCT_OUT)/recovery/root/lib/modules
-# 	find ${KERNEL_OUT}/drivers -name "*.ko" -exec cp -f {} $(PRODUCT_OUT)/root/lib/modules \;
-#
-# TARGET_KERNEL_MODULES := SC9830_MODULES
+TARGET_KERNEL_SOURCE := kernel/samsung/gtexslte
+TARGET_KERNEL_CONFIG := gtexslte_defconfig
+TARGET_VARIANT_CONFIG := gtexslte_defconfig
+TARGET_SELINUX_CONFIG := gtexslte_defconfig
+
+SC9830_MODULES:
+	mkdir -p $(PRODUCT_OUT)/root/lib/modules
+	mkdir -p $(PRODUCT_OUT)/recovery/root/lib/modules
+	make -C $(TARGET_KERNEL_SOURCE)/external_module/mali MALI_PLATFORM=sc8830 BUILD=release KDIR=$(KERNEL_OUT)
+	cp $(TARGET_KERNEL_SOURCE)/external_module/mali/*.ko $(PRODUCT_OUT)/root/lib/modules
+	cp $(TARGET_KERNEL_SOURCE)/external_module/mali/*.ko $(PRODUCT_OUT)/recovery/root/lib/modules
+	make -C $(TARGET_KERNEL_SOURCE)/external_module/wifi KDIR=$(KERNEL_OUT) clean
+	make -C $(TARGET_KERNEL_SOURCE)/external_module/wifi KDIR=$(KERNEL_OUT)
+	cp $(TARGET_KERNEL_SOURCE)/external_module/wifi/*.ko $(PRODUCT_OUT)/root/lib/modules
+	cp $(TARGET_KERNEL_SOURCE)/external_module/wifi/*.ko $(PRODUCT_OUT)/recovery/root/lib/modules
+	find ${KERNEL_OUT}/drivers -name "*.ko" -exec cp -f {} $(PRODUCT_OUT)/root/lib/modules \;
+
+TARGET_KERNEL_MODULES := SC9830_MODULES
 
 BOARD_SEPOLICY_DIRS += device/samsung/gtexslte/sepolicy
 
@@ -129,12 +135,8 @@ TARGET_BOARD_CAMERA_HAL_VERSION := HAL1.0
 TARGET_HAS_BACKLIT_KEYS := false
 
 TARGET_RECOVERY_FSTAB = device/samsung/gtexslte/recovery.fstab
-RECOVERY_VARIANT := twrp
-TW_MTP_DEVICE := /dev/mtp_usb
 TARGET_RECOVERY_PIXEL_FORMAT := "BGRA_8888"
 RECOVERY_GRAPHICS_USE_LINELENGTH := true
 BOARD_HAS_NO_MISC_PARTITION := true
-TW_THEME := portrait_hdpi
-TW_HAS_DOWNLOAD_MODE := true
 BOARD_HAS_FLIPPED_SCREEN := true
 BOARD_HAS_NO_SELECT_BUTTON := true
