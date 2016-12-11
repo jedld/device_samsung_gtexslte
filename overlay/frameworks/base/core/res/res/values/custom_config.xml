@@ -19,9 +19,6 @@
 */
 -->
 <resources>
-    <!-- If this is true, key chords can be used to take a screen record on the device. -->
-    <bool name="config_enableScreenrecordChord">true</bool>
-
     <!-- Hardware 'face' keys present on the device, stored as a bit field.
          This integer should equal the sum of the corresponding value for each
          of the following keys present:
@@ -36,17 +33,6 @@
 
     <integer name="config_backKillTimeout">1500</integer>
 
-    <string-array translatable="false" name="config_rebootActionsList">
-        <item>reboot</item>
-        <item>reboot_recovery</item>
-        <item>reboot_bootloader</item>
-    </string-array>
-
-    <bool name="config_powerProfilesSupported">false</bool>
-
-    <!-- DEPRECATED Doze: force using accelerometer as pick up sensor -->
-    <bool name="config_dozeUseAccelerometer">false</bool>
-
     <!-- Boolean to enable stk functionality on Samsung phones -->
     <bool name="config_samsung_stk">true</bool>
 
@@ -55,9 +41,6 @@
 
     <!-- Does the battery LED support multiple colors? Used to decide if the user can change the colors -->
     <bool name="config_multiColorBatteryLed">false</bool>
-
-    <!-- Set Home Button Wake Support as a persistent behaviour. -->
-    <bool name="config_persistHomeWakeSupport">false</bool>
 
     <!-- If a dock provides a lid switch, that lid can be removed. This
          setting is used to determine, whether lidOpenRotation has to be
@@ -69,10 +52,6 @@
 
     <!-- Name of that key handler class -->
     <string name="config_deviceKeyHandlerClass" translatable="false"></string>
-
-    <!-- button brightness -->
-    <bool name="config_button_brightness_support">false</bool>
-    <integer name="config_button_brightness_default">128</integer>
 
     <!-- Control the behavior when the user long presses the menu button.
             0 - Nothing
