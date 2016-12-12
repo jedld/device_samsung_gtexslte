@@ -43,7 +43,7 @@ PRODUCT_COPY_FILES += \
 		device/samsung/gtexslte/init.dhcp.rc:root/init.dhcp.rc \
 		device/samsung/gtexslte/apns-conf.xml:system/etc/apns-conf.xml \
 		device/samsung/gtexslte/bluetooth:system/etc/bluetooth \
-		# device/samsung/gtexslte/init.rc:root/init.rc \
+		device/samsung/gtexslte/init.rc:root/init.rc \
 
 $(call inherit-product, build/target/product/full.mk)
 
@@ -163,6 +163,7 @@ PRODUCT_PACKAGES += \
 
 # Permissions
 PERMISSION_XML_FILES := \
+	frameworks/native/data/etc/handheld_core_hardware.xml \
 	frameworks/native/data/etc/android.hardware.camera.front.xml \
 	frameworks/native/data/etc/android.hardware.camera.xml \
 	frameworks/native/data/etc/android.hardware.bluetooth.xml \
