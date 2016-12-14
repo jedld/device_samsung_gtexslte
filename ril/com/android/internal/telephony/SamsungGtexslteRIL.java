@@ -51,6 +51,7 @@ import com.android.internal.telephony.uicc.IccCardStatus;
 
 public class SamsungGtexslteRIL extends SamsungSPRDRIL implements CommandsInterface {
 
+    public static final int RIL_UNSOL_SIM_PB_READY = 11021;
 
     public SamsungGtexslteRIL(Context context, int preferredNetworkType,
             int cdmaSubscription, Integer instanceId) {
@@ -88,7 +89,7 @@ public class SamsungGtexslteRIL extends SamsungSPRDRIL implements CommandsInterf
                     Rlog.e(RILJ_LOG_TAG, "am " + amString + " could not be executed.");
                 }
                 break;
-            case 11021: // RIL_UNSOL_RESPONSE_HANDOVER:
+            case RIL_UNSOL_SIM_PB_READY: // RIL_UNSOL_RESPONSE_HANDOVER:
                 ret = responseVoid(p);
                 break;
             case 11003:

@@ -330,6 +330,19 @@ public class SamsungSPRDRIL extends RIL implements CommandsInterface {
     }
 
     @Override
+    protected Object responseFailCause(Parcel p) {
+        int numInts = p.readInt();
+        int response[] = new int[numInts];
+        for (int i = 0 ; i < numInts ; i++)
+            response[i] = p.readInt();
+        LastCallFailCause failCause = new LastCallFailCause();
+        failCause.causeCode = response[0];
+        if (p.dataAvail() > 0)
+            failCause.vendorCause = p.readString();
+        return failCause;
+    }
+
+    @Override
       protected Object
       responseCallList(Parcel p) {
           int num;
