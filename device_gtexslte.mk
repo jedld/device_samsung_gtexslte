@@ -20,7 +20,13 @@ endif
 # Media config
 MEDIA_CONFIGS := \
 	$(LOCAL_PATH)/media/media_codecs.xml \
-	$(LOCAL_PATH)/media/media_profiles.xml
+	$(LOCAL_PATH)/media/media_profiles.xml \
+	frameworks/av/media/libstagefright/data/media_codecs_google_audio.xml \
+	frameworks/av/media/libstagefright/data/media_codecs_google_video.xml \
+	frameworks/av/media/libstagefright/data/media_codecs_google_telephony.xml
+
+PRODUCT_COPY_FILES += \
+	$(foreach f,$(MEDIA_CONFIGS),$(f):system/etc/$(notdir $(f)))
 
 PRODUCT_COPY_FILES += \
     $(LOCAL_KERNEL):kernel
@@ -62,15 +68,6 @@ PRODUCT_PACKAGES += \
 # Codecs
 PRODUCT_PACKAGES += \
 	libstagefrighthw \
-	libstagefright_sprd_soft_mpeg4dec \
-	libstagefright_sprd_soft_h264dec \
-	libstagefright_sprd_mpeg4dec \
-	libstagefright_sprd_mpeg4enc \
-	libstagefright_sprd_h264dec \
-	libstagefright_sprd_h264enc \
-	libstagefright_sprd_vpxdec \
-	libstagefright_sprd_aacdec \
-	libstagefright_sprd_mp3dec \
 	libomx_aacdec_sprd.so \
 	libomx_avcdec_hw_sprd.so \
 	libomx_avcdec_sw_sprd.so \
@@ -104,10 +101,15 @@ PRODUCT_DEFAULT_PROPERTY_OVERRIDES += \
 
 # HWC
 PRODUCT_PACKAGES += \
-		hwcomposer.sc8830 \
-		sprd_gsp.sc8830 \
 		memtrack.sc8830 \
-		libion_sprd
+		libion_sprd \
+# sprd_gsp.sc8830 \
+# hwcomposer.sc8830 \
+
+# FM radio
+PRODUCT_PACKAGES += \
+	FMRadio \
+	fm.sc8830
 
 # Usb accessory
 PRODUCT_PACKAGES += \
