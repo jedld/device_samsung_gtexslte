@@ -156,7 +156,7 @@ uint32_t dither_open(uint32_t w, uint32_t h)
 		fp = fopen("/sys/module/mali/parameters/gpu_freq_cur", "r");
 		if(fp == NULL)
 		{
-			AERR( "can not open /sys/module/mali/parameters/gpu_cur_freq %x", fp);
+			AERR( "can not open /sys/module/mali/parameters/gpu_freq_cur %x", fp);
 			free (dither);
 			dither = NULL;
 			return 0;
@@ -243,9 +243,9 @@ static void writeFpsToProc(float fps)
 	char fps_buf[256] = {0};
 	const char *fps_proc = "/proc/benchMark/fps";
 	int fpsInt = (int)(fps+0.5);
-
+	
 	sprintf(fps_buf, "fps:%d", fpsInt);
-
+	   
 	FILE *f = fopen(fps_proc,"r+w");
 	if (NULL != f)
 	{
@@ -254,7 +254,7 @@ static void writeFpsToProc(float fps)
 		fclose(f);
 	}
 }
-
+  
 bool gIsApctFpsShow = false;
 bool gIsApctRead  = false;
 bool getApctFpsSupport()
@@ -292,7 +292,7 @@ static bool fb_is_dither_enable(struct dither_info *dither, private_handle_t con
 
 	if(fp == NULL)
 	{
-		AERR( "can not open /sys/module/mali/parameters/gpu_cur_freq %x", fp);
+		AERR( "can not open /sys/module/mali/parameters/gpu_freq_cur %x", fp);
 	}
 	else
 	{

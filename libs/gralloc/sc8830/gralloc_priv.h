@@ -36,8 +36,24 @@
 #define GRALLOC_ARM_DMA_BUF_MODULE 1
 #else
 
-typedef int ion_user_handle_t;
+enum {
+    GRALLOC_USAGE_OVERLAY_BUFFER        = 0x01000000,
+    GRALLOC_USAGE_VIDEO_BUFFER          = 0x02000000,
+    GRALLOC_USAGE_CAMERA_BUFFER         = 0x04000000,
+};
 
+enum {
+    HAL_PIXEL_FORMAT_YCbCr_422_P        = 0x12,
+    HAL_PIXEL_FORMAT_YCbCr_420_P        = 0x13,
+    HAL_PIXEL_FORMAT_YCbCr_420_I        = 0x15,
+    HAL_PIXEL_FORMAT_CbYCrY_422_I       = 0x16,
+    HAL_PIXEL_FORMAT_CbYCrY_420_I       = 0x17,
+    HAL_PIXEL_FORMAT_YCbCr_420_SP_TILED = 0x18,
+    HAL_PIXEL_FORMAT_YCbCr_420_SP       = 0x19,
+    HAL_PIXEL_FORMAT_YCrCb_420_SP_TILED = 0x1A,
+    HAL_PIXEL_FORMAT_YCrCb_422_SP       = 0x1B,
+    HAL_PIXEL_FORMAT_YCrCb_420_P        = 0x1C,
+};
 /* NOTE:
  * If your framebuffer device driver is integrated with UMP, you will have to
  * change this IOCTL definition to reflect your integration with the framebuffer
@@ -183,7 +199,7 @@ struct private_handle_t
 	int     phyaddr;
 
 #if GRALLOC_ARM_DMA_BUF_MODULE
-	ion_user_handle_t ion_hnd;
+	struct ion_handle *ion_hnd;
 #define GRALLOC_ARM_DMA_BUF_NUM_INTS 1
 #else
 #define GRALLOC_ARM_DMA_BUF_NUM_INTS 0
@@ -229,7 +245,7 @@ struct private_handle_t
 		fd(0),
 		offset(0)
 #if GRALLOC_ARM_DMA_BUF_MODULE
-		,ion_hnd(0)
+		,ion_hnd(NULL)
 #endif
 
 	{
@@ -261,7 +277,7 @@ struct private_handle_t
 #endif
 		fd(0),
 		offset(0),
-		ion_hnd(0)
+		ion_hnd(NULL)
 
 	{
 		version = sizeof(native_handle);

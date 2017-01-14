@@ -104,7 +104,10 @@ BOARD_CHARGING_MODE_BOOTING_LPM := /sys/class/power_supply/battery/batt_lp_charg
 # TARGET_KERNEL_CONFIG := gtexslte_defconfig
 # TARGET_VARIANT_CONFIG := gtexslte_defconfig
 # TARGET_SELINUX_CONFIG := gtexslte_defconfig
-#
+
+# additional FS support
+TARGET_KERNEL_HAVE_EXFAT := true
+TARGET_KERNEL_HAVE_NTFS := true
 # SC9830_MODULES:
 # 	mkdir -p $(PRODUCT_OUT)/root/lib/modules
 # 	mkdir -p $(PRODUCT_OUT)/recovery/root/lib/modules

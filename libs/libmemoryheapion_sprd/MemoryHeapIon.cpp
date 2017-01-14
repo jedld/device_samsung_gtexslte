@@ -28,8 +28,8 @@
 
 #include <cutils/log.h>
 
-#include "MemoryHeapIon_SPRD.h"
 #include <binder/MemoryHeapBase.h>
+#include "MemoryHeapIon.h"
 
 #ifdef USE_TARGET_SIMULATOR_MODE
 #include <linux/ion.h>
@@ -65,14 +65,20 @@ int MemoryHeapIon::Get_phy_addr_from_ion(int buffer_fd, int *phy_addr, int *size
 		ALOGE("%s:open dev ion error!",__func__);
 		return -1;
 	} else {
+		int ret;
 		struct ion_phys_data phys_data;
 		struct ion_custom_data  custom_data;
 		phys_data.fd_buffer = buffer_fd;
 		custom_data.cmd = ION_SPRD_CUSTOM_PHYS;
 		custom_data.arg = (unsigned long)&phys_data;
+		ret = ioctl(fd,ION_IOC_CUSTOM,&custom_data);
 		*phy_addr = phys_data.phys;
 		*size = phys_data.size;
 		close(fd);
+		if (ret) {
+			ALOGE("%s: Get phy addr error!",__func__);
+			return -2;
+		}
 	}
 	return 0;
 }
@@ -82,152 +88,326 @@ int MemoryHeapIon::get_phy_addr_from_ion(int *phy_addr, int *size) {
 		ALOGE("%s:open dev ion error!",__func__);
 		return -1;
 	} else {
+		int ret;
 		struct ion_phys_data phys_data;
 		struct ion_custom_data  custom_data;
 		phys_data.fd_buffer = MemoryHeapBase::getHeapID();
 		custom_data.cmd = ION_SPRD_CUSTOM_PHYS;
 		custom_data.arg = (unsigned long)&phys_data;
+		ret = ioctl(mIonDeviceFd,ION_IOC_CUSTOM,&custom_data);
 		*phy_addr = phys_data.phys;
 		*size = phys_data.size;
+		if (ret) {
+			ALOGE("%s: get phy addr error!",__func__);
+			return -2;
+		}
 	}
 	return 0;
 }
 
 int MemoryHeapIon::get_gsp_iova(int *mmu_addr, int *size) {
+
 	if(mIonDeviceFd<0) {
 		ALOGE("%s:open dev ion error!",__func__);
 		return -1;
 	} else {
+		int ret;
 		struct ion_mmu_data mmu_data;
 		struct ion_custom_data  custom_data;
 		mmu_data.fd_buffer = MemoryHeapBase::getHeapID();
-		custom_data.cmd = ION_SPRD_CUSTOM_GSP_MAP;
+		mmu_data.master_id = ION_GSP0;
+		custom_data.cmd = ION_SPRD_CUSTOM_MAP;
 		custom_data.arg = (unsigned long)&mmu_data;
+		ret = ioctl(mIonDeviceFd,ION_IOC_CUSTOM,&custom_data);
 		*mmu_addr = mmu_data.iova_addr;
 		*size = mmu_data.iova_size;
+		if (ret) {
+			ALOGE("%s: get gsp iova error!",__func__);
+			return -2;
+		}
 	}
 	return 0;
 }
 
 int MemoryHeapIon::free_gsp_iova(int mmu_addr, int size) {
+
 	if(mIonDeviceFd<0) {
 		ALOGE("%s:open dev ion error!",__func__);
 		return -1;
 	} else {
+		int ret;
 		struct ion_mmu_data mmu_data;
 		struct ion_custom_data  custom_data;
 		mmu_data.fd_buffer = MemoryHeapBase::getHeapID();
+		mmu_data.master_id = ION_GSP0;
 		mmu_data.iova_addr = mmu_addr;
 		mmu_data.iova_size = size;
-		custom_data.cmd = ION_SPRD_CUSTOM_GSP_UNMAP;
+		custom_data.cmd = ION_SPRD_CUSTOM_UNMAP;
 		custom_data.arg = (unsigned long)&mmu_data;
+		ret = ioctl(mIonDeviceFd,ION_IOC_CUSTOM,&custom_data);
+		if (ret) {
+			ALOGE("%s: free gsp iova error!",__func__);
+			return -2;
+		}
 	}
 	return 0;
 }
 
 int MemoryHeapIon::get_mm_iova(int *mmu_addr, int *size) {
+
 	if(mIonDeviceFd<0) {
 		ALOGE("%s:open dev ion error!",__func__);
 		return -1;
 	} else {
+		int ret;
 		struct ion_mmu_data mmu_data;
 		struct ion_custom_data  custom_data;
 		mmu_data.fd_buffer = MemoryHeapBase::getHeapID();
-		custom_data.cmd = ION_SPRD_CUSTOM_MM_MAP;
+		mmu_data.master_id = ION_MM;
+		custom_data.cmd = ION_SPRD_CUSTOM_MAP;
 		custom_data.arg = (unsigned long)&mmu_data;
+		ret = ioctl(mIonDeviceFd,ION_IOC_CUSTOM,&custom_data);
 		*mmu_addr = mmu_data.iova_addr;
 		*size = mmu_data.iova_size;
+		if (ret) {
+			ALOGE("%s: get mm iova error!",__func__);
+			return -2;
+		}
 	}
 	return 0;
 }
 
 int MemoryHeapIon::free_mm_iova(int mmu_addr, int size) {
+
 	if(mIonDeviceFd<0) {
 		ALOGE("%s:open dev ion error!",__func__);
 		return -1;
 	} else {
+		int ret;
 		struct ion_mmu_data mmu_data;
 		struct ion_custom_data  custom_data;
 		mmu_data.fd_buffer = MemoryHeapBase::getHeapID();
+		mmu_data.master_id = ION_MM;
 		mmu_data.iova_addr = mmu_addr;
 		mmu_data.iova_size = size;
-		custom_data.cmd = ION_SPRD_CUSTOM_MM_UNMAP;
+		custom_data.cmd = ION_SPRD_CUSTOM_UNMAP;
 		custom_data.arg = (unsigned long)&mmu_data;
+		ret = ioctl(mIonDeviceFd,ION_IOC_CUSTOM,&custom_data);
+		if (ret) {
+			ALOGE("%s: free mm iova error!",__func__);
+			return -2;
+		}
 	}
 	return 0;
 }
 
 int MemoryHeapIon::Get_gsp_iova(int buffer_fd, int *mmu_addr, int *size) {
 	int fd = open("/dev/ion", O_SYNC);
+
 	if(fd<0) {
 		ALOGE("%s:open dev ion error!",__func__);
 		return -1;
 	} else {
+		int ret;
 		struct ion_mmu_data mmu_data;
 		struct ion_custom_data  custom_data;
 		mmu_data.fd_buffer = buffer_fd;
-		custom_data.cmd = ION_SPRD_CUSTOM_GSP_MAP;
+		mmu_data.master_id = ION_GSP1;
+		custom_data.cmd = ION_SPRD_CUSTOM_MAP;
 		custom_data.arg = (unsigned long)&mmu_data;
+		ret = ioctl(fd,ION_IOC_CUSTOM,&custom_data);
 		*mmu_addr = mmu_data.iova_addr;
 		*size = mmu_data.iova_size;
 		close(fd);
+		if (ret) {
+			ALOGE("%s: Get gsp iova error!",__func__);
+			return -2;
+		}
 	}
 	return 0;
 }
 
 int MemoryHeapIon::Get_mm_iova(int buffer_fd, int *mmu_addr, int *size) {
 	int fd = open("/dev/ion", O_SYNC);
+
 	if(fd<0) {
 		ALOGE("%s:open dev ion error!",__func__);
 		return -1;
 	} else {
+		int ret;
 		struct ion_mmu_data mmu_data;
 		struct ion_custom_data  custom_data;
 
 		mmu_data.fd_buffer =  buffer_fd;
-		custom_data.cmd = ION_SPRD_CUSTOM_MM_MAP;
+		mmu_data.master_id = ION_MM;
+		custom_data.cmd = ION_SPRD_CUSTOM_MAP;
 		custom_data.arg = (unsigned long)&mmu_data;
+		ret = ioctl(fd,ION_IOC_CUSTOM,&custom_data);
 		*mmu_addr = mmu_data.iova_addr;
 		*size = mmu_data.iova_size;
 		close(fd);
+		if (ret) {
+			ALOGE("%s: Get mm iova error!",__func__);
+			return -2;
+		}
 	}
 	return 0;
 }
 
 int MemoryHeapIon::Free_gsp_iova(int buffer_fd, int mmu_addr, int size){
 	int fd = open("/dev/ion", O_SYNC);
+
 	if(fd<0) {
 		ALOGE("%s:open dev ion error!",__func__);
 		return -1;
 	} else {
+		int ret;
 		struct ion_mmu_data mmu_data;
 		struct ion_custom_data  custom_data;
 
 		mmu_data.fd_buffer = buffer_fd;
+		mmu_data.master_id = ION_GSP1;
 		mmu_data.iova_addr = mmu_addr;
 		mmu_data.iova_size = size;
-		custom_data.cmd = ION_SPRD_CUSTOM_GSP_UNMAP;
+		custom_data.cmd = ION_SPRD_CUSTOM_UNMAP;
 		custom_data.arg = (unsigned long)&mmu_data;
+		ret = ioctl(fd,ION_IOC_CUSTOM,&custom_data);
 		close(fd);
+		if (ret) {
+			ALOGE("%s: Free gsp iova error!",__func__);
+			return -2;
+		}
 	}
 	return 0;
 }
 
 int MemoryHeapIon::Free_mm_iova(int buffer_fd, int mmu_addr, int size){
 	int fd = open("/dev/ion", O_SYNC);
+
 	if(fd<0) {
 		ALOGE("%s:open dev ion error!",__func__);
 		return -1;
 	} else {
+		int ret;
 		struct ion_mmu_data mmu_data;
 		struct ion_custom_data  custom_data;
 
 		mmu_data.fd_buffer = buffer_fd;
+		mmu_data.master_id = ION_MM;
 		mmu_data.iova_addr = mmu_addr;
 		mmu_data.iova_size = size;
-		custom_data.cmd = ION_SPRD_CUSTOM_MM_UNMAP;
+		custom_data.cmd = ION_SPRD_CUSTOM_UNMAP;
 		custom_data.arg = (unsigned long)&mmu_data;
+		ret = ioctl(fd,ION_IOC_CUSTOM,&custom_data);
 		close(fd);
+		if (ret) {
+			ALOGE("%s: Free mm iova error!",__func__);
+			return -2;
+		}
+	}
+	return 0;
+}
+
+int MemoryHeapIon::Get_iova(int id, int buffer_fd, int *mmu_addr, int *size) {
+	int fd = open("/dev/ion", O_SYNC);
+
+	if(fd<0) {
+		ALOGE("%s:open dev ion error!",__func__);
+		return -1;
+	} else {
+		int ret;
+		struct ion_mmu_data mmu_data;
+		struct ion_custom_data  custom_data;
+
+		mmu_data.fd_buffer = buffer_fd;
+		mmu_data.master_id = id;
+		custom_data.cmd = ION_SPRD_CUSTOM_MAP;
+		custom_data.arg = (unsigned long)&mmu_data;
+		ret = ioctl(fd,ION_IOC_CUSTOM,&custom_data);
+		*mmu_addr = mmu_data.iova_addr;
+		*size = mmu_data.iova_size;
+		close(fd);
+		if (ret) {
+			ALOGE("%s: Get iova error!",__func__);
+			return -2;
+		}
+	}
+	return 0;
+}
+
+int MemoryHeapIon::Free_iova(int id, int buffer_fd, int mmu_addr, int size){
+	int fd = open("/dev/ion", O_SYNC);
+
+	if(fd<0) {
+		ALOGE("%s:open dev ion error!",__func__);
+		return -1;
+	} else {
+		int ret;
+		struct ion_mmu_data mmu_data;
+		struct ion_custom_data  custom_data;
+
+		mmu_data.fd_buffer = buffer_fd;
+		mmu_data.master_id = id;
+		mmu_data.iova_addr = mmu_addr;
+		mmu_data.iova_size = size;
+		custom_data.cmd = ION_SPRD_CUSTOM_UNMAP;
+		custom_data.arg = (unsigned long)&mmu_data;
+		ret = ioctl(fd,ION_IOC_CUSTOM,&custom_data);
+		close(fd);
+		if (ret) {
+			ALOGE("%s: Free iova error!",__func__);
+			return -2;
+		}
+	}
+	return 0;
+}
+
+int MemoryHeapIon::get_iova(int id, int *mmu_addr, int *size) {
+
+	if(mIonDeviceFd < 0) {
+		ALOGE("%s:open dev ion error!",__func__);
+		return -1;
+	} else {
+		int ret;
+		struct ion_mmu_data mmu_data;
+		struct ion_custom_data  custom_data;
+
+		mmu_data.fd_buffer = MemoryHeapBase::getHeapID();
+		mmu_data.master_id = id;
+		custom_data.cmd = ION_SPRD_CUSTOM_MAP;
+		custom_data.arg = (unsigned long)&mmu_data;
+		ret = ioctl(mIonDeviceFd,ION_IOC_CUSTOM,&custom_data);
+		*mmu_addr = mmu_data.iova_addr;
+		*size = mmu_data.iova_size;
+		if (ret) {
+			ALOGE("%s: Get iova error!",__func__);
+			return -2;
+		}
+	}
+	return 0;
+}
+
+int MemoryHeapIon::free_iova(int id, int mmu_addr, int size){
+
+	if(mIonDeviceFd < 0) {
+		ALOGE("%s:open dev ion error!",__func__);
+		return -1;
+	} else {
+		int ret;
+		struct ion_mmu_data mmu_data;
+		struct ion_custom_data  custom_data;
+
+		mmu_data.fd_buffer = MemoryHeapBase::getHeapID();
+		mmu_data.master_id = id;
+		mmu_data.iova_addr = mmu_addr;
+		mmu_data.iova_size = size;
+		custom_data.cmd = ION_SPRD_CUSTOM_UNMAP;
+		custom_data.arg = (unsigned long)&mmu_data;
+		ret = ioctl(mIonDeviceFd,ION_IOC_CUSTOM,&custom_data);
+		if (ret) {
+			ALOGE("%s: free iova error!",__func__);
+			return -2;
+		}
 	}
 	return 0;
 }
@@ -256,6 +436,7 @@ int  MemoryHeapIon::Flush_ion_buffer(int buffer_fd, void *v_addr, void *p_addr, 
 		ALOGE("%s:open dev ion error!",__func__);
 		return -1;
 	} else {
+		int ret;
 		struct ion_msync_data msync_data;
 		struct ion_custom_data  custom_data;
 
@@ -265,7 +446,12 @@ int  MemoryHeapIon::Flush_ion_buffer(int buffer_fd, void *v_addr, void *p_addr, 
 		msync_data.size = size;
 		custom_data.cmd = ION_SPRD_CUSTOM_MSYNC;
 		custom_data.arg = (unsigned long)&msync_data;
+		ret = ioctl(fd,ION_IOC_CUSTOM,&custom_data);
 		close(fd);
+		if (ret) {
+			ALOGE("%s: Flush ion buffer error!",__func__);
+			return -2;
+		}
 	}
 	return 0;
 }
@@ -274,6 +460,7 @@ int MemoryHeapIon::flush_ion_buffer(void *v_addr, void *p_addr, int size) {
 	if(mIonDeviceFd<0) {
 		return -1;
 	} else {
+		int ret;
 		struct ion_msync_data msync_data;
 		struct ion_custom_data  custom_data;
 		if (((v_addr) < (MemoryHeapBase::getBase())) || ((((char *)v_addr) + size) > (((char *)MemoryHeapBase::getBase()) + MemoryHeapBase::getSize()))) {
@@ -281,12 +468,17 @@ int MemoryHeapIon::flush_ion_buffer(void *v_addr, void *p_addr, int size) {
 			ALOGE("flush_ion_buffer error: v_addr=0x%x, p_addr=0x%x, size=0x%x",v_addr, p_addr, size);
 			return -3;
 		}
-	msync_data.fd_buffer = MemoryHeapBase::getHeapID();
-	msync_data.vaddr = v_addr;
-	msync_data.paddr = p_addr;
-	msync_data.size = size;
-	custom_data.cmd = ION_SPRD_CUSTOM_MSYNC;
-	custom_data.arg = (unsigned long)&msync_data;
+		msync_data.fd_buffer = MemoryHeapBase::getHeapID();
+		msync_data.vaddr = v_addr;
+		msync_data.paddr = p_addr;
+		msync_data.size = size;
+		custom_data.cmd = ION_SPRD_CUSTOM_MSYNC;
+		custom_data.arg = (unsigned long)&msync_data;
+		ret = ioctl(mIonDeviceFd,ION_IOC_CUSTOM,&custom_data);
+		if (ret) {
+			ALOGE("%s: flush ion buffer error!",__func__);
+			return -2;
+		}
 	}
 	return 0;
 }
@@ -315,16 +507,6 @@ MemoryHeapIon::MemoryHeapIon(const char* device, size_t size,
 	}
 }
 
-status_t MemoryHeapIon::ionInit(int ionFd, void *base, int size, int flags,
-			        const char* device, ion_user_handle_t handle,
-			        int ionMapFd) {
-	mIonDeviceFd = ionFd;
-	mIonHandle = handle;
-	MemoryHeapBase::init(ionMapFd, base, size, flags, device);
-	return NO_ERROR;
-}
-
-
 status_t MemoryHeapIon::mapIonFd(int fd, size_t size, unsigned long memory_type, int uflags)
 {
 	/* If size is 0, just fail the mmap. There is no way to get the size
@@ -340,7 +522,7 @@ status_t MemoryHeapIon::mapIonFd(int fd, size_t size, unsigned long memory_type,
 	data.len = size;
 	data.align = getpagesize();
 #if (ION_DRIVER_VERSION == 1)
-	data.heap_id_mask = memory_type;
+	data.heap_mask = memory_type;
 	//if cached buffer , force set the lowest two bits 11
 	if((memory_type&(1<<31))) {
 		data.flags = ((memory_type&(1<<31)) | 3);
