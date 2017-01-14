@@ -1,5 +1,5 @@
 allow mediaserver graphics_device:dir search;
-allow mediaserver graphics_device:chr_file { read write open };
+allow mediaserver graphics_device:chr_file { read write open ioctl };
 allow mediaserver proc:file write;
 allow mediaserver sensors_device:chr_file { open read write ioctl };
 allow mediaserver system_data_file:dir { write add_name };

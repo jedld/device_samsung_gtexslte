@@ -334,7 +334,7 @@ status_t SPRDMPEG4Decoder::initDecoder() {
     {
         int32 ret;
         if (mIOMMUEnabled) {
-            ret = mPmem_stream->get_mm_iova(&phy_addr, &size);
+            ret = mPmem_stream->get_iova(ION_MM, &phy_addr, &size);
         } else {
             ret = mPmem_stream->get_phy_addr_from_ion(&phy_addr, &size);
         }
@@ -392,7 +392,7 @@ void SPRDMPEG4Decoder::releaseDecoder() {
 
     if (mPbuf_stream_v != NULL) {
         if (mIOMMUEnabled) {
-            mPmem_stream->free_mm_iova(mPbuf_stream_p, mPbuf_stream_size);
+            mPmem_stream->free_iova(ION_MM, mPbuf_stream_p, mPbuf_stream_size);
         }
         mPmem_stream.clear();
         mPbuf_stream_v = NULL;
@@ -402,7 +402,7 @@ void SPRDMPEG4Decoder::releaseDecoder() {
 
     if(mPbuf_extra_v != NULL) {
         if (mIOMMUEnabled) {
-            mPmem_extra->free_mm_iova(mPbuf_extra_p, mPbuf_extra_size);
+            mPmem_extra->free_iova(ION_MM, mPbuf_extra_p, mPbuf_extra_size);
         }
         mPmem_extra.clear();
         mPbuf_extra_v = NULL;
@@ -591,8 +591,8 @@ OMX_ERRORTYPE SPRDMPEG4Decoder::internalSetParameter(
 
         if (defParams->nBufferCountActual
                 != port->mDef.nBufferCountActual) {
-            CHECK_GE(defParams->nBufferCountActual,
-                     port->mDef.nBufferCountMin);
+            if (defParams->nBufferCountActual < port->mDef.nBufferCountMin)
+                return OMX_ErrorUnsupportedSetting;
 
             port->mDef.nBufferCountActual = defParams->nBufferCountActual;
         }
@@ -681,7 +681,7 @@ OMX_ERRORTYPE SPRDMPEG4Decoder::internalUseBuffer(
                 int picPhyAddr = 0, bufferSize = 0;
                 native_handle_t *pNativeHandle = (native_handle_t *)((*header)->pBuffer);
                 struct private_handle_t *private_h = (struct private_handle_t *)pNativeHandle;
-                MemoryHeapIon::Get_mm_iova(private_h->share_fd,(int*)&picPhyAddr, &bufferSize);
+                MemoryHeapIon::Get_iova(ION_MM, private_h->share_fd,(int*)&picPhyAddr, &bufferSize);
 
                 pBufCtrl->pMem = NULL;
                 pBufCtrl->bufferFd = private_h->share_fd;
@@ -747,8 +747,8 @@ OMX_ERRORTYPE SPRDMPEG4Decoder::allocateBuffer(
             }
 
             if (mIOMMUEnabled) {
-                if(pMem->get_mm_iova(&phyAddr, &bufferSize)) {
-                    ALOGE("get_mm_iova fail");
+                if(pMem->get_iova(ION_MM, &phyAddr, &bufferSize)) {
+                    ALOGE("get_iova fail");
                     return OMX_ErrorInsufficientResources;
                 }
             } else {
@@ -793,7 +793,7 @@ OMX_ERRORTYPE SPRDMPEG4Decoder::freeBuffer(
             if(pBufCtrl->pMem != NULL) {
                 ALOGI("freeBuffer, phyAddr: 0x%x", pBufCtrl->phyAddr);
                 if (mIOMMUEnabled) {
-                    pBufCtrl->pMem->free_mm_iova(pBufCtrl->phyAddr, pBufCtrl->bufferSize);
+                    pBufCtrl->pMem->free_iova(ION_MM, pBufCtrl->phyAddr, pBufCtrl->bufferSize);
                 }
                 pBufCtrl->pMem.clear();
             }
@@ -1399,7 +1399,7 @@ int SPRDMPEG4Decoder::extMemoryAlloc(unsigned int extra_mem_size) {
         if(fd>=0) {
             int ret,phy_addr, buffer_size;
             if (mIOMMUEnabled) {
-                ret = mPmem_extra->get_mm_iova(&phy_addr, &buffer_size);
+                ret = mPmem_extra->get_iova(ION_MM, &phy_addr, &buffer_size);
             } else {
                 ret = mPmem_extra->get_phy_addr_from_ion(&phy_addr, &buffer_size);
             }
@@ -1463,7 +1463,7 @@ OMX_ERRORTYPE SPRDMPEG4Decoder::getExtensionIndex(
         return OMX_ErrorNone;
     }	else if (strcmp(name, SPRD_INDEX_PARAM_USE_ANB) == 0) {
         ALOGI("getExtensionIndex:%s",SPRD_INDEX_PARAM_USE_ANB);
-        *index =  (OMX_INDEXTYPE) OMX_IndexParamUseAndroidNativeBuffer2;
+        *index = (OMX_INDEXTYPE) OMX_IndexParamUseAndroidNativeBuffer2;
         return OMX_ErrorNone;
     }
 
@@ -1581,3 +1581,4 @@ android::SprdOMXComponent *createSprdOMXComponent(
     OMX_PTR appData, OMX_COMPONENTTYPE **component) {
     return new android::SPRDMPEG4Decoder(name, callbacks, appData, component);
 }
+

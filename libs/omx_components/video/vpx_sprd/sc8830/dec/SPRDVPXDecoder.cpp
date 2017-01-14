@@ -108,7 +108,7 @@ SPRDVPXDecoder::~SPRDVPXDecoder() {
 
     if (mPbuf_stream_v != NULL) {
         if (mIOMMUEnabled) {
-            mPmem_stream->free_mm_iova(mPbuf_stream_p, mPbuf_stream_size);
+            mPmem_stream->free_iova(ION_MM, mPbuf_stream_p, mPbuf_stream_size);
         }
         mPmem_stream.clear();
         mPbuf_stream_v = NULL;
@@ -118,7 +118,7 @@ SPRDVPXDecoder::~SPRDVPXDecoder() {
 
     if(mPbuf_extra_v != NULL) {
         if (mIOMMUEnabled) {
-            mPmem_extra->free_mm_iova(mPbuf_extra_p, mPbuf_extra_size);
+            mPmem_extra->free_iova(ION_MM, mPbuf_extra_p, mPbuf_extra_size);
         }
         mPmem_extra.clear();
         mPbuf_extra_v = NULL;
@@ -270,7 +270,7 @@ status_t SPRDVPXDecoder::initDecoder() {
     } else {
         int32 ret;
         if (mIOMMUEnabled) {
-            ret = mPmem_stream->get_mm_iova(&phy_addr, &size);
+            ret = mPmem_stream->get_iova(ION_MM, &phy_addr, &size);
         } else {
             ret = mPmem_stream->get_phy_addr_from_ion(&phy_addr, &size);
         }
@@ -301,7 +301,7 @@ status_t SPRDVPXDecoder::initDecoder() {
     } else {
         int32 ret;
         if (mIOMMUEnabled) {
-            ret = mPmem_extra->get_mm_iova(&phy_addr, &size);
+            ret = mPmem_extra->get_iova(ION_MM, &phy_addr, &size);
         } else {
             ret = mPmem_extra->get_phy_addr_from_ion(&phy_addr, &size);
         }
@@ -465,8 +465,8 @@ OMX_ERRORTYPE SPRDVPXDecoder::internalSetParameter(
 
         if (defParams->nBufferCountActual
                 != port->mDef.nBufferCountActual) {
-            CHECK_GE(defParams->nBufferCountActual,
-                     port->mDef.nBufferCountMin);
+            if (defParams->nBufferCountActual < port->mDef.nBufferCountMin)
+                return OMX_ErrorUnsupportedSetting;
 
             port->mDef.nBufferCountActual = defParams->nBufferCountActual;
         }
@@ -541,7 +541,7 @@ OMX_ERRORTYPE SPRDVPXDecoder::internalUseBuffer(
                 int picPhyAddr = 0, bufferSize = 0;
                 native_handle_t *pNativeHandle = (native_handle_t *)((*header)->pBuffer);
                 struct private_handle_t *private_h = (struct private_handle_t *)pNativeHandle;
-                MemoryHeapIon::Get_mm_iova(private_h->share_fd,(int*)&picPhyAddr, &bufferSize);
+                MemoryHeapIon::Get_iova(ION_MM, private_h->share_fd,(int*)&picPhyAddr, &bufferSize);
 
                 pBufCtrl->pMem = NULL;
                 pBufCtrl->bufferFd = private_h->share_fd;
@@ -605,8 +605,8 @@ OMX_ERRORTYPE SPRDVPXDecoder::allocateBuffer(
         }
 
         if (mIOMMUEnabled) {
-            if(pMem->get_mm_iova(&phyAddr, &bufferSize)) {
-                ALOGE("get_mm_iova fail");
+            if(pMem->get_iova(ION_MM, &phyAddr, &bufferSize)) {
+                ALOGE("get_iova fail");
                 return OMX_ErrorInsufficientResources;
             }
         } else {
@@ -650,7 +650,7 @@ OMX_ERRORTYPE SPRDVPXDecoder::freeBuffer(
             if(pBufCtrl->pMem != NULL) {
                 ALOGI("freeBuffer, phyAddr: 0x%x", pBufCtrl->phyAddr);
                 if (mIOMMUEnabled) {
-                    pBufCtrl->pMem->free_mm_iova(pBufCtrl->phyAddr, pBufCtrl->bufferSize);
+                    pBufCtrl->pMem->free_iova(ION_MM, pBufCtrl->phyAddr, pBufCtrl->bufferSize);
                 }
                 pBufCtrl->pMem.clear();
             }
@@ -797,7 +797,7 @@ void SPRDVPXDecoder::onQueueFilled(OMX_U32 portIndex) {
                 return ;
             }
 //    	ALOGI("%s, %d, pBuffer: 0x%x, vaddr: 0x%x", __FUNCTION__, __LINE__, outHeader->pBuffer,vaddr);
-            uint8 *yuv = (uint8 *)(vaddr + outHeader->nOffset);
+            uint8 *yuv = ((uint8 *)vaddr) + outHeader->nOffset;
             ALOGI("%s, %d, yuv: %0x,outHeader->pBuffer: %0x, outHeader->nOffset: %d, outHeader->nFlags: %d, outHeader->nTimeStamp: %lld",
                   __FUNCTION__, __LINE__, yuv, outHeader->pBuffer, outHeader->nOffset, outHeader->nFlags, outHeader->nTimeStamp);
             (*mVPXDecSetCurRecPic)(mHandle, yuv, (uint8 *)picPhyAddr, (void *)outHeader);
@@ -1151,3 +1151,4 @@ android::SprdOMXComponent *createSprdOMXComponent(
     OMX_PTR appData, OMX_COMPONENTTYPE **component) {
     return new android::SPRDVPXDecoder(name, callbacks, appData, component);
 }
+

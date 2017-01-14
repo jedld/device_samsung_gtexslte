@@ -104,12 +104,17 @@ PRODUCT_PACKAGES += \
 		memtrack.sc8830 \
 		libion_sprd \
 # sprd_gsp.sc8830 \
-# hwcomposer.sc8830 \
+# hwcomposer.sc8830
 
 # FM radio
 PRODUCT_PACKAGES += \
 	FMRadio \
+	radio.fm.default \
 	fm.sc8830
+
+# PowerHAL
+PRODUCT_PACKAGES += \
+	power.sc8830
 
 # Usb accessory
 PRODUCT_PACKAGES += \
@@ -185,8 +190,14 @@ PERMISSION_XML_FILES := \
 PRODUCT_COPY_FILES += \
 	$(foreach f,$(PERMISSION_XML_FILES),$(f):system/etc/permissions/$(notdir $(f)))
 
+	# enable Google-specific location features,
+	# like NetworkLocationProvider and LocationCollector
+PRODUCT_PROPERTY_OVERRIDES += \
+	ro.com.google.locationfeatures=1 \
+	ro.com.google.networklocation=1
+
 # Dalvik Heap config
-include frameworks/native/build/tablet-7in-hdpi-1024-dalvik-heap.mk
+$(call inherit-product, frameworks/native/build/tablet-7in-hdpi-1024-dalvik-heap.mk)
 
 PRODUCT_NAME := full_gtexslte
 PRODUCT_DEVICE := gtexslte
