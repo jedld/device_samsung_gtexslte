@@ -1,1 +1,2 @@
 allow untrusted_app cache_file:fifo_file getattr;
+allow untrusted_app batterysrv:service_manager { find };

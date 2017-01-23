@@ -14,14 +14,11 @@
  * limitations under the License.
  */
 
-#define LOG_NDEBUG 0
+//#define LOG_NDEBUG 0
 #define LOG_TAG "SprdSimpleOMXComponent"
 #include <utils/Log.h>
 
 #include "include/SprdSimpleOMXComponent.h"
-
-#include "gralloc_priv.h"
-#include "ion_sprd.h"
 
 #include <media/stagefright/foundation/ADebug.h>
 #include <media/stagefright/foundation/ALooper.h>
@@ -136,11 +133,7 @@ OMX_ERRORTYPE SprdSimpleOMXComponent::internalGetParameter(
 
         const PortInfo *port =
             &mPorts.itemAt(defParams->nPortIndex);
-#if 0
-        if(defParams->nPortIndex == OMX_DirOutput) {
-            ALOGI("internalGetParameter, outport, eColorFormat: 0x%x",port->mDef.format.video.eColorFormat);
-        }
-#endif
+
         memcpy(defParams, &port->mDef, sizeof(port->mDef));
 
         return OMX_ErrorNone;
@@ -245,7 +238,7 @@ OMX_ERRORTYPE SprdSimpleOMXComponent::internalUseBuffer(
 
     BufferInfo *buffer =
         &port->mBuffers.editItemAt(port->mBuffers.size() - 1);
-    ALOGI("internalUseBuffer, header=%p, pBuffer=%p, size=%d",*header, ptr, size);
+    ALOGI("internalUseBuffer, header=0x%p, pBuffer=0x%p, size=%d",*header, ptr, size);
     buffer->mHeader = *header;
     buffer->mOwnedByUs = false;
 
@@ -266,9 +259,9 @@ OMX_ERRORTYPE SprdSimpleOMXComponent::allocateBuffer(
     OMX_ERRORTYPE err;
     if(portIndex == OMX_DirOutput) {
         ptr = new OMX_U8[size+1024];
-        OMX_U8* ptrAlign = (OMX_U8*)(((OMX_U32)ptr + 1023)&(~1023));
+        OMX_U8* ptrAlign = (OMX_U8*)(((unsigned long)ptr + 1023)&(~1023));
 
-        ALOGI("allocateBuffer, ptr=0x%x, ptrAlign=0x%x", ptr, ptrAlign);
+        ALOGI("allocateBuffer, ptr=0x%p, ptrAlign=0x%p", ptr, ptrAlign);
 
         err = useBuffer(header, portIndex, appPrivate, size, ptrAlign);
     } else {
@@ -325,11 +318,12 @@ OMX_ERRORTYPE SprdSimpleOMXComponent::freeBuffer(
             }
 
             if(header->pOutputPortPrivate != NULL) {
-                bool iommu_is_enable = MemoryHeapIon::Mm_iommu_is_enabled();
+                BufferCtrlStruct *pBufCtrl = (BufferCtrlStruct*)(header->pOutputPortPrivate);
+                bool iommu_is_enable = MemoryHeapIon::IOMMU_is_enabled(pBufCtrl->id);
+
                 if (iommu_is_enable) {
-                    BufferCtrlStruct *pBufCtrl = (BufferCtrlStruct*)(header->pOutputPortPrivate);
                     if(pBufCtrl->bufferFd > 0) {
-                        MemoryHeapIon::Free_iova(ION_MM, (int)(pBufCtrl->bufferFd), (int)(pBufCtrl->phyAddr), (int)(pBufCtrl->bufferSize));
+                        MemoryHeapIon::Free_iova(pBufCtrl->id, pBufCtrl->bufferFd, pBufCtrl->phyAddr, pBufCtrl->bufferSize);
                     }
                 }
 
@@ -402,7 +396,7 @@ void SprdSimpleOMXComponent::onMessageReceived(const sp<AMessage> &msg) {
 
         CHECK(mState == OMX_StateExecuting && mTargetState == mState);
 
-        PortInfo *port = editPortInfo(OMX_DirInput);
+        PortInfo *port = editPortInfo(kInputPortIndex);
 
         bool found = false;
 
@@ -434,7 +428,7 @@ void SprdSimpleOMXComponent::onMessageReceived(const sp<AMessage> &msg) {
 
         CHECK(mState == OMX_StateExecuting && mTargetState == mState);
 
-        PortInfo *port = editPortInfo(OMX_DirOutput);
+        PortInfo *port = editPortInfo(kOutputPortIndex);
 
         bool found = false;
 
@@ -451,7 +445,7 @@ void SprdSimpleOMXComponent::onMessageReceived(const sp<AMessage> &msg) {
                     pBufCtrl->iRefCount--;
                 }
                 if(pBufCtrl != NULL)
-                    ALOGI("fillThisBuffer, buffer: 0x%x, header: 0x%x, iRefCount: %d",buffer, header,pBufCtrl->iRefCount);
+                    ALOGI("fillThisBuffer, buffer: 0x%p, header: 0x%p, iRefCount: %d",buffer, header,pBufCtrl->iRefCount);
                 port->mQueue.push_back(buffer);
 
                 onQueueFilled(OMX_DirOutput);
@@ -535,6 +529,10 @@ void SprdSimpleOMXComponent::onChangeState(OMX_STATETYPE state) {
     mTargetState = state;
 
     checkTransitions();
+}
+
+void SprdSimpleOMXComponent::onReset() {
+    // no-op
 }
 
 void SprdSimpleOMXComponent::onPortEnable(OMX_U32 portIndex, bool enable) {
@@ -679,6 +677,10 @@ void SprdSimpleOMXComponent::checkTransitions() {
         if (transitionComplete) {
             mState = mTargetState;
 
+            if (mState == OMX_StateLoaded) {
+                onReset();
+            }
+
             notify(OMX_EventCmdComplete, OMX_CommandStateSet, mState, NULL);
         }
     }
@@ -743,6 +745,30 @@ SprdSimpleOMXComponent::PortInfo *SprdSimpleOMXComponent::editPortInfo(
     return &mPorts.editItemAt(portIndex);
 }
 
+bool SprdSimpleOMXComponent::isExecuting() {
+    return mState == OMX_StateExecuting;
+}
 
+void SprdSimpleOMXComponent::freeOutputBufferIOVA() {
+    PortInfo *port = &mPorts.editItemAt(OMX_DirOutput);
+
+    for (size_t i = 0; i < port->mBuffers.size(); ++i) {
+        BufferInfo *buffer = &port->mBuffers.editItemAt(i);
+        OMX_BUFFERHEADERTYPE *header = buffer->mHeader;
+
+        if(header->pOutputPortPrivate != NULL) {
+                BufferCtrlStruct *pBufCtrl = (BufferCtrlStruct*)(header->pOutputPortPrivate);
+                bool iommu_is_enable = MemoryHeapIon::IOMMU_is_enabled(pBufCtrl->id);
+
+                if (iommu_is_enable) {
+                    if(pBufCtrl->bufferFd > 0) {
+                        ALOGI("%s, fd: %d, iova: 0x%lx", __FUNCTION__, pBufCtrl->bufferFd, pBufCtrl->phyAddr);
+                        MemoryHeapIon::Free_iova(pBufCtrl->id, pBufCtrl->bufferFd, pBufCtrl->phyAddr, pBufCtrl->bufferSize);
+                        pBufCtrl->bufferFd = -1;
+                }
+            }
+        }
+    }
+}
 
 }  // namespace android

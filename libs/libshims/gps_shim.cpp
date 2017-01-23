@@ -33,6 +33,10 @@ extern "C" int _ZN7android13SensorManager16createEventQueueEv() {
     return _ZN7android13SensorManager16createEventQueueENS_7String8Ei();
 }
 
+void OPENSSL_add_all_algorithms_noconf(void)
+	{
+  }
+
 extern "C" void *CRYPTO_malloc(int num, const char *file, int line);
 extern "C" void *CRYPTO_malloc(int num, const char *file, int line) {
     return num <= 0 ? NULL : malloc(num);

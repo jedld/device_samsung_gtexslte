@@ -98,29 +98,30 @@ TARGET_PREBUILT_KERNEL := kernel/samsung/gtexslte/arch/arm/boot/zImage
 BOARD_CHARGER_ENABLE_SUSPEND := true
 BOARD_CHARGING_MODE_BOOTING_LPM := /sys/class/power_supply/battery/batt_lp_charging
 
-# Integrated kernel building configs
-#
-# TARGET_KERNEL_SOURCE := kernel/samsung/gtexslte
-# TARGET_KERNEL_CONFIG := gtexslte_defconfig
-# TARGET_VARIANT_CONFIG := gtexslte_defconfig
-# TARGET_SELINUX_CONFIG := gtexslte_defconfig
-
 # additional FS support
 TARGET_KERNEL_HAVE_EXFAT := true
 TARGET_KERNEL_HAVE_NTFS := true
-# SC9830_MODULES:
-# 	mkdir -p $(PRODUCT_OUT)/root/lib/modules
-# 	mkdir -p $(PRODUCT_OUT)/recovery/root/lib/modules
-# 	make -C $(TARGET_KERNEL_SOURCE)/external_module/mali MALI_PLATFORM=sc8830 BUILD=release KDIR=$(KERNEL_OUT)
-# 	cp $(TARGET_KERNEL_SOURCE)/external_module/mali/*.ko $(PRODUCT_OUT)/root/lib/modules
-# 	cp $(TARGET_KERNEL_SOURCE)/external_module/mali/*.ko $(PRODUCT_OUT)/recovery/root/lib/modules
-# 	make -C $(TARGET_KERNEL_SOURCE)/external_module/wifi KDIR=$(KERNEL_OUT) clean
-# 	make -C $(TARGET_KERNEL_SOURCE)/external_module/wifi KDIR=$(KERNEL_OUT)
-# 	cp $(TARGET_KERNEL_SOURCE)/external_module/wifi/*.ko $(PRODUCT_OUT)/root/lib/modules
-# 	cp $(TARGET_KERNEL_SOURCE)/external_module/wifi/*.ko $(PRODUCT_OUT)/recovery/root/lib/modules
-# 	find ${KERNEL_OUT}/drivers -name "*.ko" -exec cp -f {} $(PRODUCT_OUT)/root/lib/modules \;
-#
-# TARGET_KERNEL_MODULES := SC9830_MODULES
+
+# Integrated kernel building configs
+
+TARGET_KERNEL_SOURCE := kernel/samsung/gtexslte
+TARGET_KERNEL_CONFIG := gtexslte_defconfig
+TARGET_VARIANT_CONFIG := gtexslte_defconfig
+TARGET_SELINUX_CONFIG := gtexslte_defconfig
+
+SC9830_MODULES:
+	mkdir -p $(PRODUCT_OUT)/root/lib/modules
+	mkdir -p $(PRODUCT_OUT)/recovery/root/lib/modules
+	make -C $(TARGET_KERNEL_SOURCE)/external_module/mali MALI_PLATFORM=sc8830 BUILD=release KDIR=$(KERNEL_OUT)
+	cp $(TARGET_KERNEL_SOURCE)/external_module/mali/*.ko $(PRODUCT_OUT)/root/lib/modules
+	cp $(TARGET_KERNEL_SOURCE)/external_module/mali/*.ko $(PRODUCT_OUT)/recovery/root/lib/modules
+	make -C $(TARGET_KERNEL_SOURCE)/external_module/wifi KDIR=$(KERNEL_OUT) clean
+	make -C $(TARGET_KERNEL_SOURCE)/external_module/wifi KDIR=$(KERNEL_OUT)
+	cp $(TARGET_KERNEL_SOURCE)/external_module/wifi/*.ko $(PRODUCT_OUT)/root/lib/modules
+	cp $(TARGET_KERNEL_SOURCE)/external_module/wifi/*.ko $(PRODUCT_OUT)/recovery/root/lib/modules
+	find ${KERNEL_OUT}/drivers -name "*.ko" -exec cp -f {} $(PRODUCT_OUT)/root/lib/modules \;
+
+TARGET_KERNEL_MODULES := SC9830_MODULES
 
 BOARD_SEPOLICY_DIRS += device/samsung/gtexslte/sepolicy
 
@@ -134,7 +135,12 @@ TARGET_BOARD_BACK_CAMERA_ROTATION := false
 TARGET_BOARD_FRONT_CAMERA_ROTATION := false
 #rotation capture
 TARGET_BOARD_CAMERA_ROTATION_CAPTURE := false
-TARGET_BOARD_CAMERA_HAL_VERSION := HAL1.0
+TARGET_BOARD_CAMERA_HAL_VERSION := 1.0
+TARGET_BOARD_CAMERA_ANTI_FLICKER := true
+TARGET_BOARD_USE_THRID_LIB := true
+TARGET_BOARD_USE_THIRD_AF_LIB_A := true
+TARGET_BOARD_USE_ALC_AE_AWB := true
+
 
 TARGET_HAS_BACKLIT_KEYS := false
 
