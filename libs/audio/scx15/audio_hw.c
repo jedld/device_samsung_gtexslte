@@ -427,6 +427,7 @@ struct tiny_audio_device {
     volatile int vbc_2arm;
     pthread_mutex_t vbc_lock;/*for multiple vb pipe.*/
     float voice_volume;
+    bool volume_boost;
     struct tiny_stream_in *active_input;
     struct tiny_stream_out *active_output;
     bool mic_mute;
@@ -1549,7 +1550,7 @@ static int start_output_stream(struct tiny_stream_out *out)
 
     if (!adev->call_start && adev->voip_state == 0) {
         /* FIXME: only works if only one output can be active at a time*/
-        adev->out_devices &= (~AUDIO_DEVICE_OUT_ALL);
+        adev->out_devices &= (~AUDIO_DEVICE_OUT_ALL_EX);
         adev->out_devices |= out->devices;
         if(adev->out_devices & AUDIO_DEVICE_OUT_ALL_SCO) {
             i2s_pin_mux_sel(adev,2);
@@ -1559,8 +1560,8 @@ static int start_output_stream(struct tiny_stream_out *out)
     }
     else if (adev->voip_state) {
         at_cmd_cp_usecase_type(AUDIO_CP_USECASE_VOIP_1);  /* set the usecase type to cp side */
-        if((adev->out_devices &AUDIO_DEVICE_OUT_ALL) != out->devices) {
-            adev->out_devices &= (~AUDIO_DEVICE_OUT_ALL);
+        if((adev->out_devices &AUDIO_DEVICE_OUT_ALL_EX) != out->devices) {
+            adev->out_devices &= (~AUDIO_DEVICE_OUT_ALL_EX);
             adev->out_devices |= out->devices;
         }
 	adev->prev_out_devices = ~adev->out_devices;
@@ -1853,10 +1854,10 @@ static int out_set_parameters(struct audio_stream *stream, const char *kvpairs)
         ALOGW("[out_set_parameters],after str_parms_get_str,val(0x%x) ",val);
         pthread_mutex_lock(&adev->lock);
         pthread_mutex_lock(&out->lock);
-	if (((adev->out_devices & AUDIO_DEVICE_OUT_ALL) != val) && ((val != 0) || ((val == 0) && (adev->out_devices & AUDIO_DEVICE_OUT_ALL_FM))) //val=0 will cause XRUN. So ignore the "val=0"expect for closing FM path.
+	if (((adev->out_devices & AUDIO_DEVICE_OUT_ALL_EX) != val) && ((val != 0) || ((val == 0) && (adev->out_devices & AUDIO_DEVICE_OUT_ALL_FM))) //val=0 will cause XRUN. So ignore the "val=0"expect for closing FM path.
                   || (AUDIO_MODE_IN_CALL == adev->mode)
                   ||adev->voip_start) {
-            adev->out_devices &= ~AUDIO_DEVICE_OUT_ALL;
+            adev->out_devices &= ~AUDIO_DEVICE_OUT_ALL_EX;
             adev->out_devices |= val;
             out->devices = val;
             ALOGW("out_set_parameters want to set devices:0x%x old_mode:%d new_mode:%d call_start:%d ",adev->out_devices,cur_mode,adev->mode,adev->call_start);
@@ -2538,7 +2539,7 @@ static void audio_bt_sco_thread_destory(struct tiny_audio_device *adev)
     ALOGE("bt sco : duplicate thread destory before");
     ret = pthread_join(adev->bt_sco_manager.dup_thread, NULL);
     ALOGE("bt sco : duplicate thread destory ret is %d", ret);
-    adev->bt_sco_manager.dup_thread = NULL;
+    adev->bt_sco_manager.dup_thread = 0;
 
     pthread_mutex_destroy(&adev->bt_sco_manager.dup_mutex);
     pthread_mutex_destroy(&adev->bt_sco_manager.cond_mutex);
@@ -3323,7 +3324,7 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
 
     /* FIXME: when we support multiple output devices, we will want to
      * do the following:
-     * adev->devices &= ~AUDIO_DEVICE_OUT_ALL;
+     * adev->devices &= ~AUDIO_DEVICE_OUT_ALL_EX;
      * adev->devices |= out->device;
      * select_output_device(adev);
      * This is because out_set_parameters() with a route is not
@@ -3452,11 +3453,11 @@ static int adev_set_parameters(struct audio_hw_device *dev, const char *kvpairs)
     if (ret >= 0) {
         val = atoi(value);
         pthread_mutex_lock(&adev->lock);
-        ALOGI("get adev lock adev->devices is %x,%x",adev->out_devices,adev->out_devices&AUDIO_DEVICE_OUT_ALL);
-        if(((adev->mode == AUDIO_MODE_IN_CALL) && (adev->call_connected) && ((adev->out_devices & AUDIO_DEVICE_OUT_ALL) != val))||adev->voip_state){
-            if(val&AUDIO_DEVICE_OUT_ALL) {
+        ALOGI("get adev lock adev->devices is %x,%x",adev->out_devices,adev->out_devices&AUDIO_DEVICE_OUT_ALL_EX);
+        if(((adev->mode == AUDIO_MODE_IN_CALL) && (adev->call_connected) && ((adev->out_devices & AUDIO_DEVICE_OUT_ALL_EX) != val))||adev->voip_state){
+            if(val&AUDIO_DEVICE_OUT_ALL_EX) {
                 ALOGE("adev set device in val is %x",val);
-                adev->out_devices &= ~AUDIO_DEVICE_OUT_ALL;
+                adev->out_devices &= ~AUDIO_DEVICE_OUT_ALL_EX;
                 adev->out_devices |= val;
                 if(adev->active_output)
                     adev->active_output->devices = val;
@@ -3478,8 +3479,8 @@ static int adev_set_parameters(struct audio_hw_device *dev, const char *kvpairs)
                 pthread_mutex_unlock(&adev->lock);
             }
 
-        } else if(((val & (AUDIO_DEVICE_OUT_WIRED_HEADSET | AUDIO_DEVICE_OUT_WIRED_HEADPHONE)) != 0) && ((adev->out_devices & AUDIO_DEVICE_OUT_ALL) != val)) {
-            adev->out_devices &= ~AUDIO_DEVICE_OUT_ALL;
+        } else if(((val & (AUDIO_DEVICE_OUT_WIRED_HEADSET | AUDIO_DEVICE_OUT_WIRED_HEADPHONE)) != 0) && ((adev->out_devices & AUDIO_DEVICE_OUT_ALL_EX) != val)) {
+            adev->out_devices &= ~AUDIO_DEVICE_OUT_ALL_EX;
             adev->out_devices |= val;
             ALOGW("adev_set_parameters want to set devices:0x%x mode:%d call_start:%d ",adev->out_devices,adev->mode,adev->call_start);
             select_devices_signal(adev);
@@ -3490,6 +3491,18 @@ static int adev_set_parameters(struct audio_hw_device *dev, const char *kvpairs)
         }
     }
 
+    ret = str_parms_get_str(parms, "volume_boost", value, sizeof(value));
+    if (ret >= 0) {
+        // TODO find the actual value of extra volume on stock
+        if (strcmp(value, AUDIO_PARAMETER_VALUE_ON) == 0) {
+            adev->volume_boost = true;
+            at_cmd_extra_volume(1);
+        } else {
+            adev->volume_boost = false;
+            at_cmd_extra_volume(0);
+        }
+    }
+
     str_parms_destroy(parms);
     return ret;
 }
@@ -3497,7 +3510,29 @@ static int adev_set_parameters(struct audio_hw_device *dev, const char *kvpairs)
 static char * adev_get_parameters(const struct audio_hw_device *dev,
         const char *keys)
 {
-    return strdup("");
+    struct tiny_audio_device *adev = (struct tiny_audio_device *)dev;
+    struct str_parms *query = str_parms_create_str(keys);
+    char *str;
+    char value[32];
+    struct str_parms *reply = str_parms_create();
+    int ret;
+
+    ret = str_parms_get_str(query, "volume_boost", value, sizeof(value));
+    if (ret >= 0) {
+        str_parms_add_str(reply, "volume_boost", adev->volume_boost
+                ? AUDIO_PARAMETER_VALUE_ON
+                : AUDIO_PARAMETER_VALUE_OFF);
+    }
+
+    if (ret >= 0) {
+        str = strdup(str_parms_to_str(reply));
+    } else {
+        str = strdup(keys);
+    }
+
+    str_parms_destroy(query);
+    str_parms_destroy(reply);
+    return str;
 }
 
 static int adev_init_check(const struct audio_hw_device *dev)

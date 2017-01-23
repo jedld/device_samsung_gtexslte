@@ -148,7 +148,10 @@ PRODUCT_COPY_FILES += \
 # Media config
 MEDIA_CONFIGS := \
 	$(LOCAL_PATH)/media/media_codecs.xml \
-	$(LOCAL_PATH)/media/media_profiles.xml
+	$(LOCAL_PATH)/media/media_profiles.xml \
+	$(LOCAL_PATH)/tiny_hw.xml \
+	$(LOCAL_PATH)/audio_hw.xml \
+	$(LOCAL_PATH)/audio_para.xml \
 
 PRODUCT_COPY_FILES += \
 	$(foreach f,$(MEDIA_CONFIGS),$(f):system/etc/$(notdir $(f)))
