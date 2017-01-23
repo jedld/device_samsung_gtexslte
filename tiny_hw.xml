@@ -1,5 +1,5 @@
 <!-- TinyHAL configuration file for GOD -->
-<tinyalsa-audio device="SC8830 audio">
+<tinyalsa-audio device="sc8830 audio">
 
    <!-- We are able to have most of our routing static so do that -->
    <path>
@@ -10,8 +10,8 @@
      <ctl name="DACL Playback Volume" val="7" />
      <ctl name="DACR Playback Volume" val="7" />
 
-     <ctl name="HPL CG Playback Volume1" val="63" />
-     <ctl name="HPR CG Playback Volume1" val="63" />
+     <ctl name="HPL CG Playback Volume1" val="10" />
+     <ctl name="HPR CG Playback Volume1" val="10" />
      <ctl name="HPL CG Playback Volume2" val="7" />
      <ctl name="HPR CG Playback Volume2" val="7" />
 
@@ -76,10 +76,6 @@
   <func name="Speaker Mute" val="0" />
 </private>
 
-<private name="spk2 mute">
-  <func name="Speaker2 Mute" val="0" />
-</private>
-
 <private name="earpiece mute">
   <func name="Earpiece Mute" val="0" />
 </private>
@@ -90,14 +86,6 @@
 
 <private name="Aud Codec Info">
   <func name="Aud Codec Info" val="0" />
-</private>
-
-<private name="fm da0 mux">
-  <func name="DA0 ADDFM MUX" val="0" />
-</private>
-
-<private name="fm da1 mux">
-  <func name="DA1 ADDFM MUX" val="0" />
 </private>
 
 <!-- END OF MUST NOT modify private field directly -->
@@ -154,12 +142,12 @@
 
 <device name="line-headphone">
   <path name="on">
-     <ctl name="HPL Mixer ADCRHPL Switch" val="1" />
-     <ctl name="HPR Mixer ADCLHPR Switch" val="1" />
+     <ctl name="HPL Mixer ADCLHPL Switch" val="1" />
+     <ctl name="HPR Mixer ADCRHPR Switch" val="1" />
   </path>
   <path name="off">
-     <ctl name="HPL Mixer ADCRHPL Switch" val="0" />
-     <ctl name="HPR Mixer ADCLHPR Switch" val="0" />
+     <ctl name="HPL Mixer ADCLHPL Switch" val="0" />
+     <ctl name="HPR Mixer ADCRHPR Switch" val="0" />
   </path>
 </device>
 
@@ -179,18 +167,22 @@
 </device>
 
 <device name="digital-fm">
-  <path name="on">
-	 <ctl name="Digital FM Function" val="1" />
-	 <ctl name="DA0 ADDST MUX" val="0" />
-	 <ctl name="DA1 ADDST MUX" val="0" />
-	 <ctl name="AD IISMUX" val="2" />
-  </path>
-  <path name="off">
-	 <ctl name="Digital FM Function" val="0" />
-	 <ctl name="DA0 ADDST MUX" val="0" />
-	 <ctl name="DA1 ADDST MUX" val="0" />
-	 <ctl name="AD IISMUX" val="0" />
-  </path>
+<path name="on">
+<ctl name="Digital FM Function" val="1" />
+<ctl name="DA0 ADDST MUX" val="0" />
+<ctl name="DA1 ADDST MUX" val="0" />
+<ctl name="DA0 ADDFM MUX" val="1" />
+<ctl name="DA1 ADDFM MUX" val="1" />
+<ctl name="AD IISMUX" val="2" />
+</path>
+<path name="off">
+<ctl name="Digital FM Function" val="0" />
+<ctl name="DA0 ADDST MUX" val="0" />
+<ctl name="DA1 ADDST MUX" val="0" />
+<ctl name="DA0 ADDFM MUX" val="0" />
+<ctl name="DA1 ADDFM MUX" val="0" />
+<ctl name="AD IISMUX" val="0" />
+</path>
 </device>
 
 <device name="speaker">
@@ -236,4 +228,5 @@
    <path name="off">
    </path>
 </device>
+
 </tinyalsa-audio>
