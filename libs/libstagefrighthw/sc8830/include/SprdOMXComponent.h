@@ -21,8 +21,8 @@
 #include <media/stagefright/foundation/ABase.h>
 #include <media/stagefright/foundation/AString.h>
 #include <utils/RefBase.h>
-#include <MemoryHeapIon.h>
 #include <OMX_Component.h>
+#include <MemoryHeapIon.h>
 
 #define SPRD_INDEX_PARAM_ENABLE_ANB "OMX.google.android.index.enableAndroidNativeBuffers"
 #define SPRD_INDEX_PARAM_GET_ANB "OMX.google.android.index.getAndroidNativeBufferUsage"
@@ -30,8 +30,6 @@
 #define SPRD_INDEX_PARAM_STORE_METADATA_BUFFER "OMX.google.android.index.storeMetaDataInBuffers"
 #define SPRD_INDEX_PARAM_PREPEND_SPSPPS_TO_IDR "OMX.google.android.index.prependSPSPPSToIDRFrames"
 #define SPRD_INDEX_CONFIG_THUMBNAIL_MODE "OMX.sprd.index.ThumbnailMode"
-
-namespace android {
 
 typedef enum SPRD_OMX_COLOR_FORMATTYPE {
     OMX_SPRD_COLOR_FormatYVU420SemiPlanar = 0x7FD00001,
@@ -44,24 +42,52 @@ typedef enum SPRD_OMX_INDEXTYPE {
     OMX_IndexParamStoreMetaDataBuffer,
     OMX_IndexParamPrependSPSPPSToIDR,
     OMX_IndexConfigThumbnailMode,
+	OMX_IndexConfigEncSceneMode,
+	OMX_IndexParamDescribeColorFormat,
 } SPRD_OMX_INDEXTYPE;
+
+/**
+ * Defines Encoder Scene Mode setting
+ *
+ * STRUCT MEMBERS:
+ *  nSize            : Size of the structure in bytes
+ *  nVersion         : OMX specification version information
+ *  nPortIndex       : Port that this structure applies to
+ *  nMode : Encoding scene mode(1:Volte, 2:Wfd, 0:Normal)
+ */
+
+typedef struct OMX_VIDEO_CONFIG_ENCODERSCENEMODE {
+    OMX_U32 nSize;
+    OMX_VERSIONTYPE nVersion;
+    OMX_U32 nPortIndex;
+    OMX_U32 nMode;
+} OMX_VIDEO_CONFIG_ENCODERSCENEMODE;
+
+namespace android {
 
 typedef struct BufferCtrlStruct
 {
-    OMX_U32 iRefCount;
+    uint32_t iRefCount;
     sp<MemoryHeapIon> pMem;
-    OMX_S32 bufferFd;
-    OMX_U32 phyAddr;
-    OMX_U32 bufferSize;
+    int bufferFd;
+    unsigned long phyAddr;
+    size_t bufferSize;
+    int id;
 } BufferCtrlStruct;
 
 typedef struct BufferPrivateStruct
 {
     MemoryHeapIon* pMem;
-    OMX_S32 bufferFd;
-    OMX_U32 phyAddr;
-    OMX_U32 bufferSize;
+    int bufferFd;
+    unsigned long phyAddr;
+    size_t bufferSize;
 } BufferPrivateStruct;
+
+enum {
+	kInputPortIndex  = 0,
+	kOutputPortIndex = 1,
+	kMaxPortIndex = 1,
+};
 
 struct SprdOMXComponent : public RefBase {
     SprdOMXComponent(

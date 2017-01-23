@@ -66,17 +66,19 @@ PRODUCT_PACKAGES += \
 	charger_res_images
 
 # Codecs
+# Codecs
 PRODUCT_PACKAGES += \
 	libstagefrighthw \
-	libomx_aacdec_sprd.so \
-	libomx_avcdec_hw_sprd.so \
-	libomx_avcdec_sw_sprd.so \
-	libomx_avcenc_hw_sprd.so \
-	libomx_m4vh263dec_hw_sprd.so \
-	libomx_m4vh263dec_sw_sprd.so \
-	libomx_m4vh263enc_hw_sprd.so \
-	libomx_mp3dec_sprd.so \
-	libomx_vpxdec_hw_sprd.so
+	libstagefright_sprd_aacdec \
+	libstagefright_sprd_apedec \
+	libstagefright_soft_imaadpcmdec \
+	libstagefright_soft_mjpgdec \
+	libstagefright_sprd_mp3dec \
+	libstagefright_sprd_mpeg4dec \
+	libstagefright_sprd_mpeg4enc \
+	libstagefright_sprd_h264dec \
+	libstagefright_sprd_h264enc \
+	libstagefright_sprd_vpxdec
 
 PRODUCT_PROPERTY_OVERRIDES += \
 		persist.ttydev=ttyVUART0 \
@@ -99,12 +101,17 @@ PRODUCT_DEFAULT_PROPERTY_OVERRIDES += \
 		persist.radio.add_power_save=1 \
 		rild.libpath=/system/lib/libsec-ril.so
 
-# HWC
+# Graphics
 PRODUCT_PACKAGES += \
-		memtrack.sc8830 \
-		libion_sprd \
-# sprd_gsp.sc8830 \
-# hwcomposer.sc8830
+	libGLES_mali \
+	memtrack.sc8830 \
+	gralloc.sc8830 \
+	hwcomposer.sc8830 \
+	sprd_gsp.sc8830 \
+	libmemoryheapion \
+	libion_sprd \
+	libstagefright_shim \
+	libgps_shim
 
 # FM radio
 PRODUCT_PACKAGES += \
@@ -185,7 +192,8 @@ PERMISSION_XML_FILES := \
 	frameworks/native/data/etc/android.software.sip.voip.xml \
 	frameworks/native/data/etc/android.software.sip.xml \
 	frameworks/native/data/etc/android.hardware.wifi.xml \
-	frameworks/native/data/etc/android.hardware.wifi.direct.xml
+	frameworks/native/data/etc/android.hardware.wifi.direct.xml \
+	frameworks/native/data/etc/android.software.midi.xml
 
 PRODUCT_COPY_FILES += \
 	$(foreach f,$(PERMISSION_XML_FILES),$(f):system/etc/permissions/$(notdir $(f)))

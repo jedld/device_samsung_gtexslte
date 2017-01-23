@@ -309,28 +309,6 @@ public class SamsungSPRDRIL extends RIL implements CommandsInterface {
     }
 
     @Override
-    public void getRadioCapability(Message response) {
-        String rafString = mContext.getResources().getString(
-            com.android.internal.R.string.config_radio_access_family);
-        if (RILJ_LOGD) riljLog("getRadioCapability: returning static radio capability [" + rafString + "]");
-        if (response != null) {
-            Object ret = makeStaticRadioCapability();
-            AsyncResult.forMessage(response, ret, null);
-            response.sendToTarget();
-        }
-    }
-
-    public void setDataSubscription(Message result) {
-          int simId = mInstanceId == null ? 0 : mInstanceId;
-          if (RILJ_LOGD) riljLog("Setting data subscription to " + simId);
-          invokeOemRilRequestRaw(new byte[] {(byte) 9, (byte) 4}, result);
-    }
-
-    private void invokeOemRilRequestSprd(byte key, byte value, Message response) {
-        invokeOemRilRequestRaw(new byte[] { 'S', 'P', 'R', 'D', key, value }, response);
-    }
-
-    @Override
     protected Object responseFailCause(Parcel p) {
         int numInts = p.readInt();
         int response[] = new int[numInts];
@@ -364,17 +342,18 @@ public class SamsungSPRDRIL extends RIL implements CommandsInterface {
 
               dc.state = DriverCall.stateFromCLCC(p.readInt());
               // & 0xff to truncate to 1 byte added for us, not in RIL.java
-              dc.index = p.readInt() & 0xff;
+              dc.index = p.readInt() & 0xFF;
               dc.TOA = p.readInt();
               dc.isMpty = (0 != p.readInt());
               dc.isMT = (0 != p.readInt());
               dc.als = p.readInt();
-              voiceSettings = p.readInt();
-              dc.isVoice = (0 != voiceSettings);
-              boolean isVideo = (0 != p.readInt());
+              dc.isVoice = (p.readInt() != 0);
               int call_type = p.readInt();            // Samsung CallDetails
               int call_domain = p.readInt();          // Samsung CallDetails
-              p.readString();            // Samsung CallDetails
+
+              p.readString(); // read samsung call details which we don't need
+
+              dc.isVoicePrivacy = (p.readInt() != 0);
               dc.number = p.readString();
               int np = p.readInt();
               dc.numberPresentation = DriverCall.presentationFromCLIP(np);
