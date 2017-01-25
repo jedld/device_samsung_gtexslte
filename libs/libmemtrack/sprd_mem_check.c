@@ -72,7 +72,7 @@ int sprd_check_memory(pid_t pid, enum memtrack_type type,
 	memcpy(records, record_templates,
 		   sizeof(struct memtrack_record) * allocated_records);
 
-	sprintf(tmp, "/sys/kernel/debug/mali0/memory_usage");
+	sprintf(tmp, "/sys/kernel/debug/mali0/gpu_memory");
 	fp = fopen(tmp, "r");
 	if (fp == NULL) {
 		ALOGV("sprd_check_memory ,cant open mali file");

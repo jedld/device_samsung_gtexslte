@@ -1,2 +1,3 @@
+add_lunch_combo cm_gtexslte-user
 add_lunch_combo cm_gtexslte-userdebug
 add_lunch_combo cm_gtexslte-eng
