@@ -248,23 +248,23 @@ OMX_ERRORTYPE SPRDMPEG4Encoder::initEncParams() {
 
     MMCodecBuffer ExtraMemBfr;
     MMCodecBuffer StreamMemBfr;
-    int32 phy_addr = 0;
-    int32 size = 0;
+    unsigned long  phy_addr = 0;
+    size_t size = 0;
 
-    unsigned int size_extra = ((mVideoWidth+15)&(~15)) * ((mVideoHeight+15)&(~15)) * 3/2 * 2;
+    size_t size_extra = ((mVideoWidth+15)&(~15)) * ((mVideoHeight+15)&(~15)) * 3/2 * 2;
     size_extra += 320*2*sizeof(uint32);
     size_extra += 10*1024;
     if (mIOMMUEnabled) {
-        mPmem_extra = new MemoryHeapIon("/dev/ion", size_extra, MemoryHeapBase::NO_CACHING, ION_HEAP_ID_MASK_SYSTEM);
+        mPmem_extra = new MemoryHeapIon("/dev/ion", size_extra, MemoryHeapIon::NO_CACHING, ION_HEAP_ID_MASK_SYSTEM);
     } else {
-        mPmem_extra = new MemoryHeapIon("/dev/ion", size_extra, MemoryHeapBase::NO_CACHING, ION_HEAP_ID_MASK_MM);
+        mPmem_extra = new MemoryHeapIon("/dev/ion", size_extra, MemoryHeapIon::NO_CACHING, ION_HEAP_ID_MASK_MM);
     }
     if (mPmem_extra->getHeapID() < 0) {
         ALOGE("Failed to alloc extra buffer (%d), getHeapID failed", size_extra);
         return OMX_ErrorInsufficientResources;
     } else
     {
-        int32 ret;
+        int ret;
         if(mIOMMUEnabled) {
             ret = mPmem_extra->get_iova(ION_MM, &phy_addr, &size);
         } else {
@@ -276,9 +276,9 @@ OMX_ERRORTYPE SPRDMPEG4Encoder::initEncParams() {
             return OMX_ErrorInsufficientResources;
         } else
         {
-            mPbuf_extra_v = (unsigned char*)mPmem_extra->base();
-            mPbuf_extra_p = (uint32)phy_addr;
-            mPbuf_extra_size = (int32)size;
+            mPbuf_extra_v = (uint8_t*)mPmem_extra->getBase();
+            mPbuf_extra_p = phy_addr;
+            mPbuf_extra_size = size;
         }
     }
 
@@ -947,7 +947,7 @@ void SPRDMPEG4Encoder::onQueueFilled(OMX_U32 portIndex) {
                             ALOGE("Failed to get_phy_addr_from_ion %d", ret);
                             return;
                         }
-                        mPbuf_yuv_v =(uint8_t *) mYUVInPmemHeap->base();
+                        mPbuf_yuv_v =(uint8_t *) mYUVInPmemHeap->getBase();
                         mPbuf_yuv_p = phy_addr;
                         mPbuf_yuv_size = buffer_size;
                     }
@@ -1001,7 +1001,7 @@ void SPRDMPEG4Encoder::onQueueFilled(OMX_U32 portIndex) {
                         ALOGE("Failed to get_phy_addr_from_ion %d", ret);
                         return;
                     }
-                    mPbuf_yuv_v =(uint8_t *) mYUVInPmemHeap->base();
+                    mPbuf_yuv_v =(uint8_t *) mYUVInPmemHeap->getBase();
                     mPbuf_yuv_p = phy_addr;
                     mPbuf_yuv_size = buffer_size;
                 }

@@ -1171,11 +1171,11 @@ OMX_ERRORTYPE SPRDAVCEncoder::internalGetParameter(
                 pDescribeColorFormat->eColorFormat,
                 pDescribeColorFormat->nFrameWidth, pDescribeColorFormat->nFrameHeight);
 
-        // if (fmt != OMX_COLOR_FormatYUV420SemiPlanar &&
-        //     fmt != OMX_COLOR_FormatYUV420Planar) {
-        //     ALOGW("do not know color format 0x%x = %d", fmt, fmt);
-        //     return OMX_ErrorUnsupportedSetting;
-        // }
+        if (fmt != OMX_COLOR_FormatYUV420SemiPlanar &&
+            fmt != OMX_COLOR_FormatYUV420Planar) {
+            ALOGW("do not know color format 0x%x = %d", fmt, fmt);
+            return OMX_ErrorUnsupportedSetting;
+        }
 
         // TEMPORARY FIX for some vendors that advertise sliceHeight as 0
         if (pDescribeColorFormat->nStride != 0 && pDescribeColorFormat->nSliceHeight == 0) {

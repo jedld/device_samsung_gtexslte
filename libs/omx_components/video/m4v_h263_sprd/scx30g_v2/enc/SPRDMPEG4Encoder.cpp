@@ -749,11 +749,12 @@ OMX_ERRORTYPE SPRDMPEG4Encoder::internalGetParameter(
                 pDescribeColorFormat->eColorFormat,
                 pDescribeColorFormat->nFrameWidth, pDescribeColorFormat->nFrameHeight);
 
-        // if (fmt != OMX_COLOR_FormatYUV420SemiPlanar &&
-        //     fmt != OMX_COLOR_FormatYUV420Planar) {
-        //     ALOGW("do not know color format 0x%x = %d", fmt, fmt);
-        //     return OMX_ErrorUnsupportedSetting;
-        // }
+        if (fmt != OMX_COLOR_FormatYUV420SemiPlanar &&
+            fmt != OMX_COLOR_FormatYUV420Planar &&
+            fmt != OMX_COLOR_FormatAndroidOpaque) {
+            ALOGW("do not know color format 0x%x = %d", fmt, fmt);
+            return OMX_ErrorUnsupportedSetting;
+        }
 
         // TEMPORARY FIX for some vendors that advertise sliceHeight as 0
         if (pDescribeColorFormat->nStride != 0 && pDescribeColorFormat->nSliceHeight == 0) {
@@ -811,7 +812,19 @@ OMX_ERRORTYPE SPRDMPEG4Encoder::internalGetParameter(
                 image.mPlane[image.V].mHorizSubsampling = 2;
                 image.mPlane[image.V].mVertSubsampling = 2;
                 break;
+            case OMX_COLOR_FormatAndroidOpaque:
+                image.mPlane[image.U].mOffset = pDescribeColorFormat->nStride*pDescribeColorFormat->nSliceHeight;
+                image.mPlane[image.U].mColInc = 2;
+                image.mPlane[image.U].mRowInc = pDescribeColorFormat->nStride;
+                image.mPlane[image.U].mHorizSubsampling = 2;
+                image.mPlane[image.U].mVertSubsampling = 2;
 
+                image.mPlane[image.V].mOffset = image.mPlane[image.U].mOffset + 1;
+                image.mPlane[image.V].mColInc = 2;
+                image.mPlane[image.V].mRowInc = pDescribeColorFormat->nStride;
+                image.mPlane[image.V].mHorizSubsampling = 2;
+                image.mPlane[image.V].mVertSubsampling = 2;
+                break;
             default:
                 TRESPASS();
         }
@@ -881,12 +894,11 @@ OMX_ERRORTYPE SPRDMPEG4Encoder::internalSetParameter(
         }
 
         //translate Flexible 8-bit YUV format to our default YUV format
-#if 0
+
         if (def->format.video.eColorFormat == OMX_COLOR_FormatYUV420Flexible) {
             ALOGI("internalSetParameter, translate Flexible 8-bit YUV format to SPRD YVU420SemiPlanar");
             def->format.video.eColorFormat = (OMX_COLOR_FORMATTYPE) OMX_SPRD_COLOR_FormatYVU420SemiPlanar;
         }
-#endif
 
         OMX_ERRORTYPE err = SprdSimpleOMXComponent::internalSetParameter(index, params);
         if (OMX_ErrorNone != err) {

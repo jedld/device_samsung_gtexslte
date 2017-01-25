@@ -151,7 +151,7 @@ MEDIA_CONFIGS := \
 	$(LOCAL_PATH)/media/media_profiles.xml \
 	$(LOCAL_PATH)/tiny_hw.xml \
 	$(LOCAL_PATH)/audio_hw.xml \
-	$(LOCAL_PATH)/audio_para.xml \
+	$(LOCAL_PATH)/audio_para \
 
 PRODUCT_COPY_FILES += \
 	$(foreach f,$(MEDIA_CONFIGS),$(f):system/etc/$(notdir $(f)))
@@ -181,6 +181,7 @@ PRODUCT_PACKAGES += \
 # Permissions
 PERMISSION_XML_FILES := \
 	frameworks/native/data/etc/handheld_core_hardware.xml \
+	frameworks/native/data/etc/android.hardware.camera.autofocus.xml \
 	frameworks/native/data/etc/android.hardware.camera.front.xml \
 	frameworks/native/data/etc/android.hardware.camera.xml \
 	frameworks/native/data/etc/android.hardware.bluetooth.xml \
@@ -188,6 +189,7 @@ PERMISSION_XML_FILES := \
 	frameworks/native/data/etc/android.hardware.location.gps.xml \
 	frameworks/native/data/etc/android.hardware.sensor.accelerometer.xml \
 	frameworks/native/data/etc/android.hardware.touchscreen.multitouch.xml \
+	frameworks/native/data/etc/android.hardware.touchscreen.multitouch.jazzhand.xml \
 	frameworks/native/data/etc/android.hardware.touchscreen.xml \
 	frameworks/native/data/etc/android.hardware.telephony.gsm.xml \
 	frameworks/native/data/etc/android.hardware.usb.accessory.xml \
