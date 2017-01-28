@@ -52,7 +52,9 @@ import com.android.internal.telephony.uicc.IccCardStatus;
 public class SamsungGtexslteRIL extends SamsungSPRDRIL implements CommandsInterface {
 
     public static final int RIL_UNSOL_SIM_PB_READY = 11021;
-    public static final int UNSOL_GPS_NOTI = 11009;
+    public static final int RIL_UNSOL_GPS_NOTI = 11009;
+    public static final int RIL_UNSOL_AM = 11010;
+    public static final int RIL_UNSOL_STK_CALL_CONTROL_RESULT = 11003;
 
     public SamsungGtexslteRIL(Context context, int preferredNetworkType,
             int cdmaSubscription, Integer instanceId) {
@@ -78,10 +80,10 @@ public class SamsungGtexslteRIL extends SamsungSPRDRIL implements CommandsInterf
                 ret = responseVoid(p); // Currently we'll bypass logcat for this first
                 break;
             // SAMSUNG STATES
-            case UNSOL_GPS_NOTI:
+            case RIL_UNSOL_GPS_NOTI:
                 ret = responseVoid(p);
                 break;
-            case 11010: // RIL_UNSOL_AM:
+            case RIL_UNSOL_AM: // RIL_UNSOL_AM:
                 ret = responseString(p);
                 String amString = (String) ret;
                 Rlog.d(RILJ_LOG_TAG, "Executing AM: " + amString);
@@ -96,10 +98,7 @@ public class SamsungGtexslteRIL extends SamsungSPRDRIL implements CommandsInterf
             case RIL_UNSOL_SIM_PB_READY: // RIL_UNSOL_RESPONSE_HANDOVER:
                 ret = responseVoid(p);
                 break;
-            case 11003:
-                ret = responseVoid(p);
-                break;
-            case 1036:
+            case RIL_UNSOL_STK_CALL_CONTROL_RESULT:
                 ret = responseVoid(p);
                 break;
             case 20012:

@@ -70,30 +70,6 @@ public class SamsungSPRDRIL extends RIL implements CommandsInterface {
         send(rr);
     }
 
-    public void setUiccSubscription(int slotId, int appIndex, int subId,
-            int subStatus, Message result) {
-        if (RILJ_LOGD) riljLog("setUiccSubscription" + slotId + " " + appIndex + " " + subId + " " + subStatus);
-
-        // Fake response (note: should be sent before mSubscriptionStatusRegistrants or
-        // SubscriptionManager might not set the readiness correctly)
-        AsyncResult.forMessage(result, 0, null);
-        result.sendToTarget();
-
-        // TODO: Actually turn off/on the radio (and don't fight with the ServiceStateTracker)
-        if (subStatus == 1 /* ACTIVATE */) {
-            // Subscription changed: enabled
-            if (mSubscriptionStatusRegistrants != null) {
-                mSubscriptionStatusRegistrants.notifyRegistrants(
-                        new AsyncResult (null, new int[] {1}, null));
-            }
-        } else if (subStatus == 0 /* DEACTIVATE */) {
-            // Subscription changed: disabled
-            if (mSubscriptionStatusRegistrants != null) {
-                mSubscriptionStatusRegistrants.notifyRegistrants(
-                        new AsyncResult (null, new int[] {0}, null));
-            }
-        }
-    }
 
     public void setDefaultVoiceSub(int subIndex, Message response) {
         // Fake the message
@@ -286,10 +262,6 @@ public class SamsungSPRDRIL extends RIL implements CommandsInterface {
                     mIccStatusChangedRegistrants.notifyRegistrants();
                 }
                 break;
-            case RIL_REQUEST_GET_RADIO_CAPABILITY: {
-                ret = makeStaticRadioCapability();
-                break;
-            }
         }
 
         if (error != 0) {
