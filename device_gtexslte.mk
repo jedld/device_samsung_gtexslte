@@ -121,7 +121,8 @@ PRODUCT_PACKAGES += \
 
 # PowerHAL
 PRODUCT_PACKAGES += \
-	power.sc8830
+	power.sc8830 \
+	degas-mkbootimg \
 
 # Usb accessory
 PRODUCT_PACKAGES += \
