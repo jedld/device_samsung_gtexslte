@@ -57,7 +57,7 @@ PRODUCT_COPY_FILES += \
 		device/samsung/gtexslte/init.dhcp.rc:root/init.dhcp.rc \
 		device/samsung/gtexslte/apns-conf.xml:system/etc/apns-conf.xml \
 		device/samsung/gtexslte/bluetooth:system/etc/bluetooth \
-		device/samsung/gtexslte/init.rc:root/init.rc \
+		# device/samsung/gtexslte/init.rc:root/init.rc \
 
 $(call inherit-product, build/target/product/full.mk)
 
@@ -123,7 +123,8 @@ PRODUCT_PACKAGES += \
 		libgps_shim
 
 PRODUCT_PACKAGES += \
-		 libhealthd.sc8830
+		 libhealthd.sc8830 \
+		 power.sc8830 \
 
 # Usb accessory
 PRODUCT_PACKAGES += \
@@ -152,6 +153,7 @@ PRODUCT_COPY_FILES += \
 MEDIA_CONFIGS := \
 	$(LOCAL_PATH)/media/media_codecs.xml \
 	$(LOCAL_PATH)/media/media_profiles.xml \
+	$(LOCAL_PATH)/media/media_codecs_ffmpeg.xml \
 
 
 PRODUCT_COPY_FILES += \
@@ -183,6 +185,9 @@ PRODUCT_PACKAGES += \
 	wcnd \
 	wcnd_cli \
 	libril_shim \
+
+PRODUCT_PACKAGES += \
+	degas-mkbootimg
 
 # Permissions
 PERMISSION_XML_FILES := \
