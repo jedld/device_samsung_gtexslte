@@ -1,5 +1,4 @@
 import /init.board.rc
-import /init.sc8830.usb.rc
 import /init.sc8830_ss.rc
 import /init.rilcommon.rc
 import /init.fac.rc
@@ -76,12 +75,10 @@ on init
     restorecon_recursive /mnt/obb
 
 on fs
-    ubiattach 0 ubipac
-    mount_all /fstab.sc8830
     mount pstore pstore /sys/fs/pstore
     setprop ro.crypto.fuse_sdcard true
-	symlink /system/res /res
-	symlink /system/bin /bin
+    symlink /system/res /res
+    symlink /system/bin /bin
 
 #Allow others to read fb devices
     chmod 660 /dev/graphics/fb0
