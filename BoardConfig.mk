@@ -25,6 +25,7 @@ BOARD_PROVIDES_LIBRIL := true
 BOARD_PROVIDES_LIBREFERENCE_RIL := true
 
 # Audio
+USE_CUSTOM_AUDIO_POLICY := 0
 BOARD_USES_TINYALSA_AUDIO := true
 BOARD_USES_SS_VOIP := true
 BOARD_USE_LIBATCHANNEL_WRAPPER := true
@@ -103,7 +104,7 @@ WIFI_DRIVER_FW_PATH_AP      := "ap_mode"
 WIFI_DRIVER_MODULE_PATH     := "/lib/modules/sprdwl.ko"
 WIFI_DRIVER_MODULE_NAME     := "sprdwl"
 
-# TARGET_PREBUILT_KERNEL := kernel/samsung/gtexslte/arch/arm/boot/zImage
+TARGET_PREBUILT_KERNEL := kernel/samsung/gtexslte/arch/arm/boot/zImage
 
 # Charger
 BOARD_CHARGER_ENABLE_SUSPEND := true
@@ -117,7 +118,7 @@ TARGET_VARIANT_CONFIG := gtexslte_defconfig
 TARGET_SELINUX_CONFIG := gtexslte_defconfig
 TARGET_KERNEL_CROSS_COMPILE_PREFIX := arm-linux-androideabi-
 # BOARD_MKBOOTIMG_ARGS := --base 0 --pagesize 2048
-BOARD_CUSTOM_BOOTIMG_MK := $(LOCAL_PATH)/mkbootimg.mk
+# BOARD_CUSTOM_BOOTIMG_MK := $(LOCAL_PATH)/mkbootimg.mk
 
 # #
 SC9830_MODULES:
