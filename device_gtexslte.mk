@@ -17,6 +17,9 @@ else
 	LOCAL_KERNEL := $(TARGET_PREBUILT_KERNEL)
 endif
 
+PRODUCT_COPY_FILES := \
+    $(LOCAL_KERNEL):kernel
+
 # Media config
 MEDIA_CONFIGS := \
 	$(LOCAL_PATH)/media/media_codecs.xml \
@@ -57,7 +60,7 @@ PRODUCT_COPY_FILES += \
 		device/samsung/gtexslte/init.dhcp.rc:root/init.dhcp.rc \
 		device/samsung/gtexslte/apns-conf.xml:system/etc/apns-conf.xml \
 		device/samsung/gtexslte/bluetooth:system/etc/bluetooth \
-		device/samsung/gtexslte/init.rc:root/init.rc \
+		# device/samsung/gtexslte/init.rc:root/init.rc \
 
 # audio policy override
 PRODUCT_COPY_FILES += \
