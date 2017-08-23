@@ -35,10 +35,10 @@ PRODUCT_COPY_FILES += \
 SYSTEM_INIT_RC_FILES := \
 		device/samsung/gtexslte/system/etc/init/at_distributor.rc \
 		device/samsung/gtexslte/system/etc/init/engpc.rc \
-		device/samsung/gtexslte/system/etc/init/mediacodec.rc \
-		device/samsung/gtexslte/system/etc/init/mediaserver.rc \
-		device/samsung/gtexslte/system/etc/init/rild.rc \
-		device/samsung/gtexslte/system/etc/init/surfaceflinger.rc \
+		# device/samsung/gtexslte/system/etc/init/mediacodec.rc \
+		# device/samsung/gtexslte/system/etc/init/mediaserver.rc \
+		# device/samsung/gtexslte/system/etc/init/rild.rc \
+		# device/samsung/gtexslte/system/etc/init/surfaceflinger.rc \
 
 PRODUCT_COPY_FILES += \
 	$(foreach f,$(SYSTEM_INIT_RC_FILES),$(f):system/etc/init/$(notdir $(f)))
@@ -59,7 +59,7 @@ PRODUCT_COPY_FILES += \
 		device/samsung/gtexslte/init.wifi.rc:root/init.wifi.rc \
 		device/samsung/gtexslte/init.dhcp.rc:root/init.dhcp.rc \
 		device/samsung/gtexslte/apns-conf.xml:system/etc/apns-conf.xml \
-		device/samsung/gtexslte/bluetooth:system/etc/bluetooth \
+		# device/samsung/gtexslte/bluetooth:system/etc/bluetooth \
 		# device/samsung/gtexslte/init.rc:root/init.rc \
 
 # audio policy override
