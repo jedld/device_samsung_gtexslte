@@ -12,7 +12,7 @@ PRODUCT_AAPT_CONFIG := normal
 PRODUCT_AAPT_PREF_CONFIG := hdpi
 
 ifeq ($(TARGET_PREBUILT_KERNEL),)
-	LOCAL_KERNEL := device/samsung/gtexslte/kernel
+	LOCAL_KERNEL := kernel/samsung/gtexslte/arch/arm/boot/zImage
 else
 	LOCAL_KERNEL := $(TARGET_PREBUILT_KERNEL)
 endif
