@@ -152,6 +152,10 @@ PRODUCT_DEFAULT_PROPERTY_OVERRIDES += \
 
 # Graphics & HWC
 PRODUCT_PACKAGES += \
+		android.hardware.graphics.allocator@2.0-impl \
+		android.hardware.graphics.allocator@2.0-service \
+		android.hardware.graphics.mapper@2.0-impl \
+		android.hardware.memtrack@1.0-impl \
 		libHWCUtils \
 		libGLES_mali.so \
 		memtrack.sc8830 \
@@ -162,6 +166,13 @@ PRODUCT_PACKAGES += \
 		libion_sprd \
 		libstagefright_shim \
 		libgps_shim
+
+PRODUCT_PACKAGES +=\
+		android.hardware.graphics.composer@2.1-impl
+
+#sensor pacakge
+PRODUCT_PACKAGES += \
+		android.hardware.sensors@1.0-impl \
 
 PRODUCT_PACKAGES += \
 		 libhealthd.sc8830 \
@@ -214,8 +225,19 @@ PRODUCT_PACKAGES += \
 
 # Wifi
 PRODUCT_PACKAGES += \
+  android.hardware.wifi@1.0-service \
+	libwpa_client \
 	wpa_supplicant \
 	hostapd \
+
+
+# Vibrator
+PRODUCT_PACKAGES += \
+    android.hardware.vibrator@1.0-impl
+
+#USB HAL
+PRODUCT_PACKAGES += \
+    android.hardware.usb@1.0-service
 
 #ril
 PRODUCT_PACKAGES += \
@@ -224,8 +246,12 @@ PRODUCT_PACKAGES += \
 	wcnd_cli \
 	libril_shim \
 
+# custom samsung image build tools
 PRODUCT_PACKAGES += \
-	degas-mkbootimg
+	degas-mkbootimg \
+  simg2image_samsung \
+  img2simg_samsung \
+  libsparse_samsung
 
 # Permissions
 PERMISSION_XML_FILES := \
