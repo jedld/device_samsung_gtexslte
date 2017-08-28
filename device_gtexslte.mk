@@ -71,6 +71,10 @@ PRODUCT_COPY_FILES += \
 	device/samsung/gtexslte/gps/gps.conf:system/etc/gps.conf \
 	device/samsung/gtexslte/gps/gps.xml:system/etc/gps.xml \
 
+# Vendor Interface Manifest
+PRODUCT_COPY_FILES += \
+	device/samsung/gtexslte/manifest.xml:vendor/manifest.xml
+
 # audio configs
 PRODUCT_COPY_FILES += \
 	device/samsung/gtexslte/audio/audio_hw.xml:system/etc/audio_hw.xml \
@@ -128,6 +132,7 @@ PRODUCT_PROPERTY_OVERRIDES += \
 		persist.ttydev=ttyVUART0 \
 		ro.sf.lcd_density=213 \
 		ro.sf.hwrotation=180 \
+		ro.sf.disable_triple_buffer=0 \
 		ro.sf.xdpi=216.17 \
 		ro.sf.ydpi=216.746 \
 		ro.opengles.version=131072 \
@@ -154,6 +159,7 @@ PRODUCT_DEFAULT_PROPERTY_OVERRIDES += \
 PRODUCT_PACKAGES += \
 		android.hardware.graphics.allocator@2.0-impl \
 		android.hardware.graphics.allocator@2.0-service \
+		android.hardware.graphics.composer@2.1-impl \
 		android.hardware.graphics.mapper@2.0-impl \
 		android.hardware.memtrack@1.0-impl \
 		libHWCUtils \
@@ -167,12 +173,27 @@ PRODUCT_PACKAGES += \
 		libstagefright_shim \
 		libgps_shim
 
-PRODUCT_PACKAGES +=\
-		android.hardware.graphics.composer@2.1-impl
-
-#sensor pacakge
 PRODUCT_PACKAGES += \
+    android.hardware.audio@2.0-impl \
+    android.hardware.audio.effect@2.0-impl \
+    android.hardware.broadcastradio@1.0-impl \
+    android.hardware.soundtrigger@2.0-impl
+
+# Fingerprint HIDL implementation
+PRODUCT_PACKAGES += \
+    android.hardware.biometrics.fingerprint@2.1-service
+
+PRODUCT_PACKAGES += \
+		android.hardware.contexthub@1.0-impl \
 		android.hardware.sensors@1.0-impl \
+
+PRODUCT_PACKAGES += \
+    android.hardware.drm@1.0-impl \
+
+
+# Vibrator HAL
+PRODUCT_PACKAGES += \
+    android.hardware.vibrator@1.0-impl
 
 PRODUCT_PACKAGES += \
 		 libhealthd.sc8830 \
@@ -192,6 +213,13 @@ PRODUCT_PACKAGES += \
 PRODUCT_PACKAGES += \
 	libbluetooth_jni \
 
+# Default OMX service to non-Treble
+PRODUCT_PROPERTY_OVERRIDES += \
+    persist.media.treble_omx=false
+
+#USB HAL
+PRODUCT_PACKAGES += \
+    android.hardware.usb@1.0-service
 
 # Lights
 PRODUCT_PACKAGES += \
@@ -225,19 +253,10 @@ PRODUCT_PACKAGES += \
 
 # Wifi
 PRODUCT_PACKAGES += \
-  android.hardware.wifi@1.0-service \
+	android.hardware.wifi@1.0-service \
 	libwpa_client \
 	wpa_supplicant \
 	hostapd \
-
-
-# Vibrator
-PRODUCT_PACKAGES += \
-    android.hardware.vibrator@1.0-impl
-
-#USB HAL
-PRODUCT_PACKAGES += \
-    android.hardware.usb@1.0-service
 
 #ril
 PRODUCT_PACKAGES += \
