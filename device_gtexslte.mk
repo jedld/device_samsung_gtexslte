@@ -73,7 +73,7 @@ PRODUCT_COPY_FILES += \
 
 # Vendor Interface Manifest
 PRODUCT_COPY_FILES += \
-	device/samsung/gtexslte/manifest.xml:vendor/manifest.xml
+	device/samsung/gtexslte/manifest.xml:system/vendor/manifest.xml \
 
 # audio configs
 PRODUCT_COPY_FILES += \
@@ -142,6 +142,7 @@ PRODUCT_PROPERTY_OVERRIDES += \
 		ro.adb.secure=0 \
 		ro.secure=0 \
 		persist.sys.usb.config=mtp,adb \
+		persist.media.treble_omx=false \
 		ro.cmlegal.url=https://lineageos.org/legal \
 		ro.lineageoms.version=$(LINEAGE_VERSION)
 
@@ -153,13 +154,12 @@ PRODUCT_DEFAULT_PROPERTY_OVERRIDES += \
 		telephony.lteOnCdmaDevice=0 \
 		persist.radio.apm_sim_not_pwdn=1 \
 		persist.radio.add_power_save=1 \
-		rild.libpath=/system/lib/libsec-ril.so
+		rild.libpath=/system/lib/libsec-ril.so \
+
 
 # Graphics & HWC
 PRODUCT_PACKAGES += \
 		android.hardware.graphics.allocator@2.0-impl \
-		android.hardware.graphics.allocator@2.0-service \
-		android.hardware.graphics.composer@2.1-impl \
 		android.hardware.graphics.mapper@2.0-impl \
 		android.hardware.memtrack@1.0-impl \
 		libHWCUtils \
@@ -172,6 +172,10 @@ PRODUCT_PACKAGES += \
 		libion_sprd \
 		libstagefright_shim \
 		libgps_shim
+
+# DRM
+PRODUCT_PACKAGES += \
+    android.hardware.drm@1.0-impl
 
 PRODUCT_PACKAGES += \
     android.hardware.audio@2.0-impl \

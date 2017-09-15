@@ -1,3 +1,5 @@
+hal_server_domain(surfaceflinger, hal_graphics_allocator)
+
 allow surfaceflinger ctl_default_prop:property_service set;
 allow surfaceflinger debug_prop:property_service set;
 allow surfaceflinger kernel:system module_request;

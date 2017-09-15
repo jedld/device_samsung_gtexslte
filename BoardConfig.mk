@@ -19,6 +19,9 @@ BOARD_KERNEL_CMDLINE := console=ttyS1,115200n8
 BOARD_KERNEL_BASE := 0
 BOARD_KERNEL_PAGESIZE := 2048
 
+# early mounts
+PRODUCT_SYSTEM_VERITY_PARTITION := /dev/block/platform/sdio_emmc/by-name/SYSTEM
+
 #rild
 BOARD_PROVIDES_RILD := true
 BOARD_PROVIDES_LIBRIL := true
@@ -52,6 +55,8 @@ BOARD_HAS_LARGE_FILESYSTEM := true
 TARGET_BOARD_INFO_FILE := device/samsung/gtexslte/board-info.txt
 BOARD_EGL_CFG := device/samsung/gtexslte/egl.cfg
 
+TARGET_USES_ION := true
+
 # Graphics
 TARGET_RUNNING_WITHOUT_SYNC_FRAMEWORK := true
 BOARD_EGL_NEEDS_HANDLE_VALUE := true
@@ -63,6 +68,8 @@ USE_OVERLAY_COMPOSER_GPU := true
 USE_UI_OVERLAY := true
 USE_SPRD_DITHER := true
 TARGET_GPU_PLATFORM := utgard
+
+SF_START_GRAPHICS_ALLOCATOR_SERVICE := true
 
 #1080 hw acceleration
 BOARD_VSP_SUPPORT_1080I := true
