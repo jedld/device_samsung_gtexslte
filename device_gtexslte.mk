@@ -64,7 +64,13 @@ PRODUCT_COPY_FILES += \
 
 # audio policy override
 PRODUCT_COPY_FILES += \
-		device/samsung/gtexslte/audio/audio_policy.conf:system/etc/audio_policy.conf \
+	device/samsung/gtexslte/audio_policy_config/audio_policy_configuration.xml:system/etc/audio_policy_configuration.xml \
+	device/samsung/gtexslte/audio_policy_config/audio_policy_configuration_stub.xml:system/etc/audio_policy_configuration_stub.xml \
+	device/samsung/gtexslte/audio_policy_config/a2dp_audio_policy_configuration.xml:system/etc/a2dp_audio_policy_configuration.xml \
+	device/samsung/gtexslte/audio_policy_config/usb_audio_policy_configuration.xml:system/etc/usb_audio_policy_configuration.xml \
+	device/samsung/gtexslte/audio_policy_config/r_submix_audio_policy_configuration.xml:system/etc/r_submix_audio_policy_configuration.xml \
+	device/samsung/gtexslte/audio_policy_config/audio_policy_volumes.xml:system/etc/audio_policy_volumes.xml \
+	device/samsung/gtexslte/audio_policy_config/default_volume_tables.xml:system/etc/default_volume_tables.xml
 
 # gps
 PRODUCT_COPY_FILES += \
@@ -133,8 +139,8 @@ PRODUCT_PROPERTY_OVERRIDES += \
 		ro.sf.lcd_density=213 \
 		ro.sf.hwrotation=180 \
 		ro.sf.disable_triple_buffer=0 \
-		ro.sf.xdpi=216.17 \
-		ro.sf.ydpi=216.746 \
+		ro.sf.lcd_width=96 \
+		ro.sf.lcd_height=150 \
 		ro.opengles.version=131072 \
 		ro.product.hardware=SS_SHARKLS \
 		ro.product.modem.mode=GSM,EDGE,TD-SCDMA,WCDMA,TD-LTE,FDD-LTE \
@@ -159,19 +165,22 @@ PRODUCT_DEFAULT_PROPERTY_OVERRIDES += \
 
 # Graphics & HWC
 PRODUCT_PACKAGES += \
-		android.hardware.graphics.allocator@2.0-impl \
+		android.hardware.graphics.composer@2.1-impl \
 		android.hardware.graphics.mapper@2.0-impl \
 		android.hardware.memtrack@1.0-impl \
 		libHWCUtils \
 		libGLES_mali.so \
 		memtrack.sc8830 \
-		gralloc.sc8830.so \
+		gralloc.sc8830 \
+		libdither \
 		hwcomposer.sc8830 \
 		sprd_gsp.sc8830 \
 		libmemoryheapion \
 		libion_sprd \
 		libstagefright_shim \
 		libgps_shim
+
+PRODUCT_PACKAGES += libGLES_android
 
 # DRM
 PRODUCT_PACKAGES += \
@@ -183,17 +192,8 @@ PRODUCT_PACKAGES += \
     android.hardware.broadcastradio@1.0-impl \
     android.hardware.soundtrigger@2.0-impl
 
-# Fingerprint HIDL implementation
 PRODUCT_PACKAGES += \
-    android.hardware.biometrics.fingerprint@2.1-service
-
-PRODUCT_PACKAGES += \
-		android.hardware.contexthub@1.0-impl \
 		android.hardware.sensors@1.0-impl \
-
-PRODUCT_PACKAGES += \
-    android.hardware.drm@1.0-impl \
-
 
 # Vibrator HAL
 PRODUCT_PACKAGES += \
@@ -307,6 +307,7 @@ PRODUCT_PROPERTY_OVERRIDES += \
 	ro.com.google.locationfeatures=1 \
 	ro.com.google.networklocation=1 \
 	ro.sys.sdcardfs=true \
+	ro.sf.disable_triple_buffer=0 \
 
 # Dalvik Heap config
 include frameworks/native/build/tablet-7in-hdpi-1024-dalvik-heap.mk
