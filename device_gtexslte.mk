@@ -57,7 +57,6 @@ PRODUCT_COPY_FILES += \
 		device/samsung/gtexslte/init.dhcp.rc:root/init.dhcp.rc \
 		device/samsung/gtexslte/apns-conf.xml:system/etc/apns-conf.xml \
 		device/samsung/gtexslte/bluetooth:system/etc/bluetooth \
-		device/samsung/gtexslte/init.rc:root/init.rc \
 
 PRODUCT_COPY_FILES += \
 	device/samsung/gtexslte/audio_policy_config/audio_policy_configuration.xml:system/etc/audio_policy_configuration.xml \
@@ -152,12 +151,41 @@ PRODUCT_DEFAULT_PROPERTY_OVERRIDES += \
 		persist.radio.add_power_save=1 \
 		rild.libpath=/system/lib/libsec-ril.so
 
+	# HIDL (HAL Interface Definition Language)
+ PRODUCT_PACKAGES += \
+ 	android.hardware.audio@2.0-impl \
+ 	android.hardware.audio.effect@2.0-impl \
+ 	android.hardware.bluetooth@1.0-impl \
+ 	android.hardware.broadcastradio@1.0-impl \
+ 	android.hardware.camera.provider@2.4-impl.legacy \
+ 	android.hardware.configstore@1.0-impl \
+ 	android.hardware.drm@1.0-impl \
+ 	android.hardware.gnss@1.0-impl \
+ 	android.hardware.graphics.composer@2.1-impl \
+ 	android.hardware.graphics.mapper@2.0-impl \
+ 	android.hardware.keymaster@3.0-impl \
+ 	android.hardware.light@2.0-impl \
+ 	android.hardware.memtrack@1.0-impl \
+ 	android.hardware.power@1.0-impl \
+ 	android.hardware.radio@1.0-impl \
+ 	android.hardware.radio.deprecated@1.0 \
+ 	android.hardware.renderscript@1.0-impl \
+ 	android.hardware.sensors@1.0-impl \
+ 	android.hardware.usb@1.0-service \
+ 	android.hardware.vibrator@1.0-impl \
+ 	android.hardware.wifi@1.0-service \
+ 	android.system.net.netd@1.0 \
+  	camera.device@1.0-impl.legacy
+
+ PRODUCT_COPY_FILES += \
+ 	$(LOCAL_PATH)/manifest.xml:system/vendor/manifest.xml
+
 # Graphics & HWC
 PRODUCT_PACKAGES += \
 		libHWCUtils \
 		libGLES_mali.so \
 		memtrack.sc8830 \
-		gralloc.sc8830.so \
+		gralloc.sc8830 \
 		libdither \
 		hwcomposer.sc8830 \
 		sprd_gsp.sc8830 \

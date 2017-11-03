@@ -67,6 +67,8 @@ TARGET_GPU_PLATFORM := utgard
 TARGET_USE_PREBUILT_GRALLOC := false
 SOC_SCX30G_V2 := true
 
+SF_START_GRAPHICS_ALLOCATOR_SERVICE := true
+
 #1080 hw acceleration
 BOARD_VSP_SUPPORT_1080I := true
 
@@ -119,6 +121,7 @@ TARGET_KERNEL_SOURCE := kernel/samsung/gtexslte
 TARGET_KERNEL_CONFIG := gtexslte_defconfig
 TARGET_VARIANT_CONFIG := gtexslte_defconfig
 TARGET_SELINUX_CONFIG := gtexslte_defconfig
+BOARD_KERNEL_IMAGE_NAME := zImage
 TARGET_KERNEL_CROSS_COMPILE_PREFIX := arm-linux-androideabi-
 # BOARD_MKBOOTIMG_ARGS := --base 0 --pagesize 2048
 BOARD_CUSTOM_BOOTIMG_MK := $(LOCAL_PATH)/mkbootimg.mk
