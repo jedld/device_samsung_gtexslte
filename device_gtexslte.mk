@@ -56,7 +56,6 @@ PRODUCT_COPY_FILES += \
 		device/samsung/gtexslte/init.wifi.rc:root/init.wifi.rc \
 		device/samsung/gtexslte/init.dhcp.rc:root/init.dhcp.rc \
 		device/samsung/gtexslte/apns-conf.xml:system/etc/apns-conf.xml \
-		device/samsung/gtexslte/bluetooth:system/etc/bluetooth \
 
 PRODUCT_COPY_FILES += \
 	device/samsung/gtexslte/audio_policy_config/audio_policy_configuration.xml:system/etc/audio_policy_configuration.xml \
