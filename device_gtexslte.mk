@@ -162,12 +162,33 @@ PRODUCT_DEFAULT_PROPERTY_OVERRIDES += \
 		persist.radio.add_power_save=1 \
 		rild.libpath=/system/lib/libsec-ril.so \
 
+PRODUCT_PACKAGES += \
+	android.hardware.audio@2.0-impl \
+	android.hardware.audio.effect@2.0-impl \
+	android.hardware.bluetooth@1.0-impl \
+	android.hardware.broadcastradio@1.0-impl \
+	android.hardware.camera.provider@2.4-impl.legacy \
+	android.hardware.configstore@1.0-impl \
+	android.hardware.drm@1.0-impl \
+	android.hardware.gnss@1.0-impl \
+	android.hardware.graphics.composer@2.1-impl \
+	android.hardware.graphics.mapper@2.0-impl \
+	android.hardware.keymaster@3.0-impl \
+	android.hardware.light@2.0-impl \
+	android.hardware.memtrack@1.0-impl \
+	android.hardware.power@1.0-impl \
+	android.hardware.radio@1.0-impl \
+	android.hardware.radio.deprecated@1.0 \
+	android.hardware.renderscript@1.0-impl \
+	android.hardware.sensors@1.0-impl \
+	android.hardware.usb@1.0-service \
+	android.hardware.vibrator@1.0-impl \
+	android.hardware.wifi@1.0-service \
+	android.system.net.netd@1.0 \
+ 	camera.device@1.0-impl.legacy
 
 # Graphics & HWC
 PRODUCT_PACKAGES += \
-		android.hardware.graphics.composer@2.1-impl \
-		android.hardware.graphics.mapper@2.0-impl \
-		android.hardware.memtrack@1.0-impl \
 		libHWCUtils \
 		libGLES_mali.so \
 		memtrack.sc8830 \
@@ -181,23 +202,6 @@ PRODUCT_PACKAGES += \
 		libgps_shim
 
 PRODUCT_PACKAGES += libGLES_android
-
-# DRM
-PRODUCT_PACKAGES += \
-    android.hardware.drm@1.0-impl
-
-PRODUCT_PACKAGES += \
-    android.hardware.audio@2.0-impl \
-    android.hardware.audio.effect@2.0-impl \
-    android.hardware.broadcastradio@1.0-impl \
-    android.hardware.soundtrigger@2.0-impl
-
-PRODUCT_PACKAGES += \
-		android.hardware.sensors@1.0-impl \
-
-# Vibrator HAL
-PRODUCT_PACKAGES += \
-    android.hardware.vibrator@1.0-impl
 
 PRODUCT_PACKAGES += \
 		 libhealthd.sc8830 \
@@ -220,10 +224,6 @@ PRODUCT_PACKAGES += \
 # Default OMX service to non-Treble
 PRODUCT_PROPERTY_OVERRIDES += \
     persist.media.treble_omx=false
-
-#USB HAL
-PRODUCT_PACKAGES += \
-    android.hardware.usb@1.0-service
 
 # Lights
 PRODUCT_PACKAGES += \
@@ -257,10 +257,13 @@ PRODUCT_PACKAGES += \
 
 # Wifi
 PRODUCT_PACKAGES += \
-	android.hardware.wifi@1.0-service \
 	libwpa_client \
 	wpa_supplicant \
 	hostapd \
+	libandroid_net \
+	libwpa_client \
+	wificond \
+	wifilogd
 
 #ril
 PRODUCT_PACKAGES += \
@@ -268,6 +271,7 @@ PRODUCT_PACKAGES += \
 	wcnd \
 	wcnd_cli \
 	libril_shim \
+	libsecril-client \
 
 # custom samsung image build tools
 PRODUCT_PACKAGES += \
