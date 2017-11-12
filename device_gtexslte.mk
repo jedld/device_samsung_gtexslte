@@ -104,17 +104,17 @@ PRODUCT_PACKAGES += \
 PRODUCT_PACKAGES += \
 	libstagefright_shim \
 	libcolorformat_switcher \
-	libstagefrighthw \
-	libstagefright_sprd_soft_mpeg4dec \
-	libstagefright_sprd_soft_h264dec \
-	libstagefright_sprd_mpeg4dec \
-	libstagefright_sprd_mpeg4enc \
-	libstagefright_sprd_h264dec \
-	libstagefright_sprd_h264enc \
-	libstagefright_sprd_vpxdec \
-	libstagefright_soft_mjpgdec \
-	libstagefright_soft_imaadpcmdec \
-	libstagefright_sprd_mp3dec
+	# libstagefrighthw \
+	# libstagefright_sprd_soft_mpeg4dec \
+	# libstagefright_sprd_soft_h264dec \
+	# libstagefright_sprd_mpeg4dec \
+	# libstagefright_sprd_mpeg4enc \
+	# libstagefright_sprd_h264dec \
+	# libstagefright_sprd_h264enc \
+	# libstagefright_sprd_vpxdec \
+	# libstagefright_soft_mjpgdec \
+	# libstagefright_soft_imaadpcmdec \
+	# libstagefright_sprd_mp3dec
 
 #vpu
 PRODUCT_PACKAGES += \
@@ -242,6 +242,10 @@ PRODUCT_PACKAGES += \
 PRODUCT_PACKAGES += \
 	camera.sc8830
 
+# WiFi
+PRODUCT_PACKAGES += \
+	libwifi-hal-bcm
+
 # Wifi
 PRODUCT_PACKAGES += \
 	wpa_supplicant \
@@ -252,6 +256,7 @@ PRODUCT_PACKAGES += \
 	engpc \
 	wcnd \
 	wcnd_cli \
+	libril \
 	libril_shim \
 
 PRODUCT_PACKAGES += \
